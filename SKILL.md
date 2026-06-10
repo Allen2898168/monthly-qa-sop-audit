@@ -51,10 +51,10 @@ Do not output only local file paths or generated artifacts. Do not create `*_aud
 
 ### 二、扣分/加分建议
 
-This section must be a table with exactly these columns:
+This section must be a TSV/Lark-pasteable table with exactly these columns. Do not use Markdown pipe-table formatting:
 
 ```text
-结论 | 项目 | 问题 | 建议
+结论	项目	问题	建议
 ```
 
 Every deduction/bonus row must include exact counts and affected Jira keys when Jira-key-level evidence exists. Keep monthly threshold conclusions here, not inside row-level `扣分项`.
@@ -77,7 +77,7 @@ This section is mandatory unless the user explicitly says `不用输出逐单表
 时间	JIRA单	状态	流程类型	实际测试完成	提测前完成测试用例产出	用例/评审记录	测试用例是否编写	全局影响面评估分析是否完整	自测报告	测试报告	验收/线上问题	风险同步/闭环记录	Bug记录是否规范	月度工作量加分在汇总项统计	扣分项
 ```
 
-Do not replace this table with an abbreviated table such as `JIRA单/主要问题`, `逐单风险概览`, `问题标签`, or `扣分事实`.
+Do not replace this table with an abbreviated table such as `JIRA单/主要问题`, `逐单风险概览`, `问题标签`, or `扣分事实`. Do not output Markdown pipe tables for the row-level table.
 
 For TSV/Excel-copyable output, keep one demand per line and replace line breaks inside cells with spaces.
 

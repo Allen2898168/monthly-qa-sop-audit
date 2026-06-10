@@ -500,11 +500,15 @@ def audit_row(row):
         row_findings.append("未见风险同步/闭环记录")
         manual.append("确认是否存在已知风险未同步或未闭环")
 
-    if bug_record and not re.search(r"无关联Bug|规范|无$", bug_record):
-        if re.search(r"不规范|缺|未记录|无法复现|复现步骤", bug_record):
+    if bug_record:
+        if re.search(r"不规范\s*[1-9]|不规范|未记录|无法复现", bug_record):
             issues.append("Bug记录不规范")
             row_findings.append("Bug记录不规范")
-        elif re.search(r"P0|P1|P2|P3|Bug", bug_record, re.I):
+        elif re.search(r"待确认：Bug详情未打开", bug_record):
+            issues.append("存在关联 Bug")
+            row_findings.append("存在关联 Bug，需确认是否测试逃逸")
+            manual.append("确认 Bug 等级、是否线上漏测、是否测试侧责任")
+        elif not re.search(r"无关联Bug|不规范\s*0|规范\s+\d+\s*个，不规范\s*0|无$", bug_record) and re.search(r"P0|P1|P2|P3|Bug", bug_record, re.I):
             issues.append("存在关联 Bug")
             row_findings.append("存在关联 Bug，需确认是否测试逃逸")
             manual.append("确认 Bug 等级、是否线上漏测、是否测试侧责任")
@@ -553,6 +557,16 @@ def summarize(results):
     missing_reports = row_finding_counts.get("缺测试报告/结论", 0)
     completion_only = row_finding_counts.get("仅测试完成备注", 0)
     report_pending = sum(count for finding, count in row_finding_counts.items() if finding.startswith("待确认：链接无法打开"))
+    bug_nonstandard = 0
+    bug_demand_keys = []
+    for result in results:
+        bug_text = norm(result.get("row", {}).get("Bug记录是否规范"))
+        match = re.search(r"不规范\s*(\d+)\s*个", bug_text)
+        if match:
+            count = int(match.group(1))
+            if count > 0:
+                bug_nonstandard += count
+                bug_demand_keys.append(result["jira"])
     if missing_reports:
         monthly_suggestions.append(f"缺测试报告/结论共 {missing_reports} 个需求，标准流程按缺测试报告评估。")
     if completion_only:
@@ -606,6 +620,14 @@ def summarize(results):
                 "项目": "测试专业能力与规范执行",
                 "问题": f"测试报告链接无法确认 {report_pending} 个",
                 "建议扣分": "需人工确认",
+            }
+        )
+    if bug_nonstandard:
+        concise_kpi_rows.append(
+            {
+                "项目": "重点工作/缺陷规范",
+                "问题": f"Bug 记录不规范 {bug_nonstandard} 个，涉及 {len(bug_demand_keys)} 个需求",
+                "建议扣分": "扣 5 分" if bug_nonstandard > 5 else f"扣 {bug_nonstandard} 分",
             }
         )
     return {
@@ -783,9 +805,82 @@ REPORT_COLUMNS = [
 ]
 
 
+TESTER_DISPLAY_NAMES = {
+    "alice": "Alice",
+    "lena107940": "Lena",
+    "maxz108336": "MaxZ",
+    "ming107435": "Ming",
+    "gabriel@weexdev.com": "Gabriel",
+    "kayce107735": "Kayce",
+    "rain107774": "Rain",
+    "sheep": "Sheep",
+    "terence": "Terence",
+    "tim108179": "TimWu",
+    "wesley107941": "Wesley",
+}
+
+
 def markdown_cell(value):
     text = str(value or "-").strip() or "-"
     return text.replace("\n", " ").replace("|", "\\|")
+
+
+def tsv_cell(value):
+    text = str(value or "-").strip() or "-"
+    return text.replace("\r", " ").replace("\n", " ").replace("\t", " ")
+
+
+def tester_display_name(value):
+    raw = norm(value)
+    if not raw:
+        return "测试人员"
+    first = raw.split(",")[0].strip()
+    return TESTER_DISPLAY_NAMES.get(first.lower(), first)
+
+
+def month_scope(rows):
+    dates = []
+    for row in rows:
+        d = parse_date(first_value(row, ["预计测试开始", "预计测试开始时间", "测试开始", "测试开始时间", "时间"]))
+        if d:
+            dates.append(d)
+    if not dates:
+        return {"label": "本月", "start": "-", "end": "-"}
+    first = min(dates).replace(day=1)
+    next_month = date(first.year + (1 if first.month == 12 else 0), 1 if first.month == 12 else first.month + 1, 1)
+    return {
+        "label": f"{first.year} 年 {first.month} 月",
+        "start": first.isoformat(),
+        "end": next_month.isoformat(),
+    }
+
+
+def conclusion_label(suggestion):
+    t = norm(suggestion)
+    if t.startswith("+") or "加" in t and "扣" not in t:
+        return "加分"
+    if "需人工" in t or "待确认" in t or "确认" in t:
+        return "待确认"
+    if "建议" in t:
+        return "建议扣分"
+    if "扣" in t:
+        return "明确扣分"
+    return "待确认"
+
+
+def risk_summary(summary):
+    labels = []
+    issue_counts = summary.get("issue_counts", {})
+    row_finding_counts = summary.get("row_finding_counts", {})
+    if issue_counts.get("提测前缺测试用例链接"):
+        labels.append("提测前用例留痕不足")
+    if row_finding_counts.get("仅测试完成备注") or row_finding_counts.get("缺测试报告/结论"):
+        labels.append("测试报告/结论不充分")
+    if row_finding_counts.get("缺自测报告"):
+        labels.append("自测/提测报告缺失")
+    if row_finding_counts.get("Bug记录不规范"):
+        labels.append("Bug 记录不规范")
+    return "、".join(labels) if labels else "未发现明显 SOP 留痕集中风险"
 
 
 def report_row_value(result, column):
@@ -823,69 +918,59 @@ def report_row_value(result, column):
 
 def markdown_report(rows, results, summary):
     lines = []
+    scope = month_scope(rows)
+    tester_value = first_value(rows[0], ["测试人员", "测试介入人", "人员", "QA"]) if rows else ""
+    tester_name = tester_display_name(tester_value)
     lines.append("一、月度结论摘要")
     lines.append("")
-    lines.append(
-        f"本月共统计 {len(rows)} 个需求，有问题单量 {sum(1 for r in results if r['issues'])} 个，"
-        f"待确认项 {summary['manual_confirmation_count']} 个。"
-    )
+    lines.append(f"{tester_name} {scope['label']} Jira 扫描范围：{len(rows)} 个需求，按 测试人员（多选）= {tester_value or '-'} 且 预计测试开始时间 在 {scope['start']} 至 {scope['end']} 前筛选。")
+    lines.append("")
     workload_bonus = summary.get("workload_bonus", [])
     if workload_bonus:
-        bonus_text = "；".join(
-            f"{row['测试人员']} {workload_threshold_text(parse_number(str(row['当月工时统计/天'])))}，{workload_bonus_suggestion(parse_number(str(row['当月工时统计/天'])))}"
-            for row in workload_bonus
-        )
-        lines.append(bonus_text + "。")
+        first_bonus = workload_bonus[0]
+        days = parse_number(str(first_bonus.get("当月工时统计/天")))
+        threshold = workload_threshold_text(days)
+        suggestion = workload_bonus_suggestion(days)
+        lines.append(f"月度工作量按 Jira 测试介入/完成记录估算 {format_points(days) if days is not None else '-'} 个等效测试工作日，{threshold.replace('全部有效统计工作日 ', '满足 ')}，建议工作量加 {suggestion.replace('+', '')}。主要扣分风险集中在：{risk_summary(summary)}。")
+    else:
+        lines.append(f"主要扣分风险集中在：{risk_summary(summary)}。")
     lines.append(score_summary(summary))
     lines.append("")
 
     lines.append("二、扣分/加分建议")
     lines.append("")
-    lines.append("| 结论 | 项目 | 问题 | 建议 |")
-    lines.append("|---|---|---|---|")
+    lines.append("结论\t项目\t问题\t建议")
     concise_rows = summary.get("concise_kpi_rows", [])
     if concise_rows:
         for row in concise_rows:
-            lines.append(
-                "| 明确扣分 | {项目} | {问题} | {建议扣分} |".format(
-                    项目=markdown_cell(row.get("项目")),
-                    问题=markdown_cell(row.get("问题")),
-                    建议扣分=markdown_cell(row.get("建议扣分")),
-                )
-            )
+            suggestion = row.get("建议扣分")
+            lines.append("\t".join([conclusion_label(suggestion), tsv_cell(row.get("项目")), tsv_cell(row.get("问题")), tsv_cell(suggestion)]))
     else:
-        lines.append("| 暂不扣 | SOP留痕 | 未发现明显 SOP 缺失 | 暂不扣 |")
+        lines.append("暂不扣\tSOP留痕\t未发现明显 SOP 缺失\t暂不扣")
     if workload_bonus:
         for row in workload_bonus:
-            lines.append(
-                "| 加分 | 工作量加分 | {person} {problem} | {suggestion} |".format(
-                    person=markdown_cell(row.get("测试人员")),
-                    problem=markdown_cell(workload_threshold_text(parse_number(str(row.get("当月工时统计/天"))))),
-                    suggestion=markdown_cell(workload_bonus_suggestion(parse_number(str(row.get("当月工时统计/天"))))),
-                )
-            )
-    lines.append("| 暂不扣 | 交付节奏 | 未发现明确测试侧延期时适用 | 暂不扣 |")
+            lines.append("\t".join([
+                "加分",
+                "工作量加分",
+                tsv_cell(f"{row.get('测试人员')} {workload_threshold_text(parse_number(str(row.get('当月工时统计/天'))))}"),
+                tsv_cell(workload_bonus_suggestion(parse_number(str(row.get("当月工时统计/天"))))),
+            ]))
+    lines.append("暂不扣\t交付节奏\t未发现明确测试侧延期时适用\t暂不扣")
     lines.append("")
 
     lines.append("三、关键确认项")
     lines.append("")
     if summary["manual_confirmation_count"]:
-        lines.append("| 确认项 | 涉及单子 | 影响 |")
-        lines.append("|---|---|---|")
+        lines.append("确认项\t涉及单子\t影响")
         manual_jiras = [result["jira"] for result in results if result["manual_confirmations"]]
-        lines.append(
-            "| 待确认项 | {} | 仅影响责任归因或是否纳入扣分 |".format(
-                markdown_cell("、".join(manual_jiras) if manual_jiras else "-")
-            )
-        )
+        lines.append("\t".join(["待确认项", tsv_cell("、".join(manual_jiras) if manual_jiras else "-"), "仅影响责任归因或是否纳入扣分"]))
     else:
         lines.append("关键确认项：无")
     lines.append("")
 
     lines.append("四、逐单检查表")
     lines.append("")
-    lines.append("| " + " | ".join(REPORT_COLUMNS) + " |")
-    lines.append("|" + "|".join(["---"] * len(REPORT_COLUMNS)) + "|")
+    lines.append("\t".join(REPORT_COLUMNS))
     workload_bonus = summary.get("workload_bonus", [])
     workload_by_person = {}
     fallback_workload = ""
@@ -900,8 +985,8 @@ def markdown_report(rows, results, summary):
             workload_text = workload_by_person.get(person) or (fallback_workload if len(workload_bonus) == 1 else "")
             if workload_text:
                 result = {**result, "row": {**result.get("row", {}), "月度工作量加分在汇总项统计": workload_text}}
-        values = [markdown_cell(report_row_value(result, column)) for column in REPORT_COLUMNS]
-        lines.append("| " + " | ".join(values) + " |")
+        values = [tsv_cell(report_row_value(result, column)) for column in REPORT_COLUMNS]
+        lines.append("\t".join(values))
     return "\n".join(lines)
 
 

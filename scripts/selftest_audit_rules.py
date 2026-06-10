@@ -317,13 +317,15 @@ def main():
     for section in ["一、月度结论摘要", "二、扣分/加分建议", "三、关键确认项", "四、逐单检查表"]:
         if section not in report:
             raise AssertionError(f"Markdown report missing required section: {section}")
-    required_header = "时间 | JIRA单 | 状态 | 流程类型 | 实际测试完成 | 提测前完成测试用例产出 | 用例/评审记录 | 测试用例是否编写 | 全局影响面评估分析是否完整 | 自测报告 | 测试报告 | 验收/线上问题 | 风险同步/闭环记录 | Bug记录是否规范 | 月度工作量加分在汇总项统计 | 扣分项"
+    required_header = "时间\tJIRA单\t状态\t流程类型\t实际测试完成\t提测前完成测试用例产出\t用例/评审记录\t测试用例是否编写\t全局影响面评估分析是否完整\t自测报告\t测试报告\t验收/线上问题\t风险同步/闭环记录\tBug记录是否规范\t月度工作量加分在汇总项统计\t扣分项"
     if required_header not in report:
-        raise AssertionError("Markdown report missing required row-level columns")
+        raise AssertionError("Report missing required TSV row-level columns")
     if "全部有效统计工作日 25 天" not in report:
         raise AssertionError("Row-level workload column must include concrete monthly workdays")
-    if "| 加分 | 工作量加分 | Rain 全部有效统计工作日 25 天，>=25 天 | +1 分 |" not in report:
+    if "加分\t工作量加分\tRain 全部有效统计工作日 25 天，>=25 天\t+1 分" not in report:
         raise AssertionError("Workload bonus row must include threshold text and bonus suggestion")
+    if "| 结论 | 项目 | 问题 | 建议 |" in report or "| " + " | ".join(audit.REPORT_COLUMNS) + " |" in report:
+        raise AssertionError("Formal report must use TSV/Lark-paste format, not Markdown pipe tables")
     for phrase in ["预计总扣分", "预计加分", "预计最终得分"]:
         if phrase not in report:
             raise AssertionError(f"Monthly conclusion must include {phrase}")
