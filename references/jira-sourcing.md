@@ -46,6 +46,35 @@ For tester/month KPI audits, use this fixed access order and do not branch into 
 
 Do not continue with anonymous Jira API data. Do not use old local TSV/CSV files as a replacement for live scan.
 
+## Preferred Jira API Collection Path
+
+Use Jira REST API through the authenticated Chrome/CDP session as the primary live-scan path. Do not open Jira issue pages one by one for ordinary fields or comments.
+
+Preferred command pattern:
+
+```bash
+NODE_PATH=/path/to/node_modules \
+node scripts/jira_cdp_live_scan.mjs \
+  --tester rain107774 \
+  --display-name Rain \
+  --month 2026-05 \
+  --audit
+```
+
+Runtime behavior:
+
+1. Connect to Chrome/CDP, default `http://localhost:9222`.
+2. Open Jira origin in that Chrome context.
+3. Verify login with `/rest/api/2/myself`.
+4. Probe the fixed `cf[]` JQL candidates below with `maxResults=1`.
+5. Page Jira search results with a field whitelist.
+6. Collect comments, links, planned dates, status, tester owner, and linked Bugs through Jira REST `fetch` executed in the browser context.
+7. Apply associated-Bug sampling before opening Bug details.
+8. Open only necessary Lark/Google test-case links. Do not open self-test, submission, or test-report links by default.
+9. Generate standard audit rows and, with `--audit`, pipe them into `scripts/audit_monthly_sop.py` for the four-section report.
+
+If Playwright cannot be imported, run the command with `NODE_PATH` pointing to the bundled runtime node modules, or install Playwright in the runtime used by the skill.
+
 ## Default Jira Query
 
 Use Jira `cf[]` field ids by default. Do not use Chinese custom-field names as the first attempt, because field display names, locale, and punctuation can drift.

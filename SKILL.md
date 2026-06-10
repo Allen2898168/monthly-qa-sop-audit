@@ -101,6 +101,7 @@ Formal KPI audit output must not use these weak/unstable terms:
    - Use the available browser-control capability or an authenticated Chrome/CDP session to open Jira.
    - Verify the session can see a known WWLD issue or the target Jira filter.
    - If only anonymous Jira API access is available, treat live scan as blocked and ask the user to open/login Jira in the accessible browser or provide an explicit export.
+   - Prefer `scripts/jira_cdp_live_scan.mjs` for Jira data collection: it executes Jira REST `fetch` inside the authenticated Chrome/CDP session, batches demand rows, samples linked Bugs, and only opens necessary Lark test-case links.
 
 3. Source demand rows:
    - For live scan, follow `references/jira-sourcing.md`.
@@ -118,13 +119,14 @@ Formal KPI audit output must not use these weak/unstable terms:
 6. If using offline helpers:
 
 ```bash
+NODE_PATH=/path/to/node_modules node scripts/jira_cdp_live_scan.mjs --tester rain107774 --display-name Rain --month 2026-05 --audit
 python3 ~/.codex/skills/monthly-qa-sop-audit/scripts/normalize_jira_seed.py seed.tsv --format tsv > audit_input.tsv
 python3 ~/.codex/skills/monthly-qa-sop-audit/scripts/audit_monthly_sop.py audit_input.tsv --format tsv
 python3 ~/.codex/skills/monthly-qa-sop-audit/scripts/check_bug_record_quality.py bugs.json
 python3 ~/.codex/skills/monthly-qa-sop-audit/scripts/summarize_acceptance_issues.py acceptance.tsv --format tsv
 ```
 
-Treat helper output as deterministic evidence support, not as a substitute for live Jira/Lark inspection.
+`jira_cdp_live_scan.mjs --audit` is the preferred live-scan path when Chrome/CDP is authenticated. The Python helpers remain deterministic offline evidence support and are not a substitute for live Jira/Lark inspection.
 
 ## Packaging Checklist
 

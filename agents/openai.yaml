@@ -1,4 +1,4 @@
 interface:
   display_name: "月度 QA SOP 审计"
   short_description: "按月扫描测试人员 Jira 单留痕并对照 KPI/SOP 输出扣分建议。"
-  default_prompt: "请使用这个技能审计某测试人员当月 Jira 单。默认按 references/jira-sourcing.md 从 Jira/Lark 实时扫描，不要先找本地文件；评分规则以 references/sop-rules.md 为准。结果直接在聊天中输出，不要默认生成文件。正式 KPI 审计必须包含：一、月度结论摘要；二、扣分/加分建议；三、关键确认项；四、逐单检查表。二、扣分/加分建议必须是表格，列为：结论、项目、问题、建议。逐单检查表必须使用 skill 规定的完整字段。scripts 仅用于离线 CSV/TSV/JSON 辅助分析，不代表 Jira/Lark live scan。"
+  default_prompt: "请使用这个技能审计某测试人员当月 Jira 单。默认按 references/jira-sourcing.md 从 Jira/Lark 实时扫描，不要先找本地文件；实时 Jira 主路径优先使用 scripts/jira_cdp_live_scan.mjs，通过 Chrome/CDP 登录态执行 Jira REST fetch、批量抓取需求、抽样检查 Bug，并只打开必要 Lark 用例链接；评分规则以 references/sop-rules.md 为准。结果直接在聊天中输出，不要默认生成文件。正式 KPI 审计必须包含：一、月度结论摘要；二、扣分/加分建议；三、关键确认项；四、逐单检查表。二、扣分/加分建议必须是表格，列为：结论、项目、问题、建议。逐单检查表必须使用 skill 规定的完整字段。其他 Python scripts 仅用于离线 CSV/TSV/JSON 辅助分析，不代表 Jira/Lark live scan。"
