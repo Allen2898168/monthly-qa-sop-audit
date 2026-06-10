@@ -410,7 +410,9 @@ def audit_row(row):
     finish = norm(row.get("实际测试完成"))
     standard_flow = ("标准" in flow_type) or flow_type == "待确认"
 
-    pre_submit_case_missing = not has_traceable_case_link(pre_submit_case)
+    pre_submit_case_missing = (not has_traceable_case_link(pre_submit_case)) or bool(
+        re.search(r"^(否|不满足)|晚于提测|晚于测试开始|才有用例|后补", pre_submit_case)
+    )
     case_review_status = classify_case_review(case_record)
     case_review_missing = case_review_status == "缺失评审"
     if pre_submit_case_missing:

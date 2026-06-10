@@ -162,6 +162,8 @@ function stripAdf(value) {
   if (typeof value === "object") {
     const parts = [];
     if (value.text) parts.push(value.text);
+    if (value.attrs?.href) parts.push(value.attrs.href);
+    if (value.attrs?.url) parts.push(value.attrs.url);
     if (value.content) parts.push(stripAdf(value.content));
     return parts.join("\n");
   }
@@ -301,9 +303,9 @@ function casePreSubmitStatus(caseLinks, startDate) {
   if (!caseLinks.length) return "否，未见提测前用例留痕";
   const dated = caseLinks.filter((link) => link.created).sort((a, b) => a.created.localeCompare(b.created));
   const first = dated[0] || caseLinks[0];
-  if (first.created && startDate && first.created <= startDate) return `是，${first.created} 已产出`;
-  if (first.created) return `否，${first.created} 才有用例链接`;
-  return "是，有用例链接";
+  if (first.created && startDate && first.created <= startDate) return `是，${first.created} 已产出 ${first.url}`;
+  if (first.created) return `否，${first.created} 才有用例链接 ${first.url}`;
+  return `是，有用例链接 ${first.url}`;
 }
 
 async function importPlaywright() {
@@ -597,7 +599,11 @@ async function main() {
   process.stdout.write(proc.stdout);
 }
 
-main().catch((error) => {
+main()
+  .then(() => {
+    process.exit(0);
+  })
+  .catch((error) => {
   console.error(error.message || error);
   process.exit(1);
-});
+  });
