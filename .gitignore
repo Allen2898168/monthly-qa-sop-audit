@@ -1,0 +1,12 @@
+__pycache__/
+*.py[cod]
+*.tsv
+*.csv
+*.xlsx
+*.xls
+*.json
+*.zip
+*.log
+*_audit*
+*_summary*
+.DS_Store
