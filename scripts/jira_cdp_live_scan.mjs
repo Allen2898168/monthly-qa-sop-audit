@@ -11,6 +11,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { createRequire } from "node:module";
 
 const JIRA_BASE = "https://jira.weex.tech";
 const FIELD_TESTER = "customfield_11622";
@@ -309,7 +310,12 @@ async function importPlaywright() {
   try {
     return await import("playwright");
   } catch (error) {
-    throw new Error("Cannot import playwright. Run with NODE_PATH pointing to bundled node_modules or install playwright.");
+    try {
+      const require = createRequire(import.meta.url);
+      return require("playwright");
+    } catch {
+      throw new Error("Cannot import playwright. Run with NODE_PATH pointing to bundled node_modules or install playwright.");
+    }
   }
 }
 
