@@ -9,4 +9,8 @@ __pycache__/
 *.log
 *_audit*
 *_summary*
+!scripts/selftest_audit_rules.py
 .DS_Store
+.env
+.env.local
+.claude/

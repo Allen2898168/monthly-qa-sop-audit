@@ -31,72 +31,48 @@ TSV
 
 For tester/month KPI audits, use this fixed access order and do not branch into local files unless the user explicitly requested offline mode:
 
-1. Use the available browser-control tool to operate the user's logged-in browser session.
-2. If browser-control is unavailable, try an authenticated Chrome/CDP session only when it is already accessible from the current runtime.
-3. Verify login before any audit work:
-   - open a known Jira issue such as `https://jira.weex.tech/browse/WWLD-12494`, or run an authenticated Jira search;
+1. First use the scripted live-collection path: authenticated Jira REST API session (Basic auth `username:token`) plus Lark app-token access when credentials are already available in the runtime.
+   - default Jira credential source order: workspace `.env`, then workspace `.env.local`, then `/Users/gabriel/Downloads/jira/.env` (`JIRA_URL`, `JIRA_USERNAME`, `JIRA_TOKEN`), or equivalent environment variables / a user-indicated `.env`;
+   - default Lark credential source order: workspace `.env`, then workspace `.env.local`, then `/Users/gabriel/Downloads/weexpr/eff/.env` (`app_id`, `app_secret`), or equivalent environment variables / a user-indicated `.env`;
+   - never print the token value into chat or reports.
+   - do not start browser-control or Chrome/CDP only to verify Jira access before workspace `.env` and `.env.local` have both been checked and this REST path has been attempted when credentials are present.
+2. Verify login before any audit work:
+   - for REST API: `GET /rest/api/2/myself` must return a real account (not `anonymous`), then fetch a known issue such as `WWLD-12494`;
    - confirm the response can see WWLD project data and is not `anonymous`;
    - confirm Jira comments/links are visible enough to collect SOP evidence.
-4. If login/session verification fails, stop the live audit and report:
+3. If the scripted path cannot authenticate, cannot see the required Jira/Lark evidence, or hits an evidence boundary that blocks the audit, use the available browser-control tool to operate the user's logged-in browser session.
+4. If browser-control is unavailable, try an authenticated Chrome/CDP session only when it is already accessible from the current runtime.
+5. For browser/CDP fallback, open a known Jira issue such as `https://jira.weex.tech/browse/WWLD-12494`, or run an authenticated Jira search.
+6. If login/session verification fails on all paths, stop the live audit and report:
 
 ```text
 无法实时扫描 Jira/Lark：当前会话未取得已登录 Jira 权限。
-需要用户在可被 Codex 控制的浏览器中打开并登录 Jira，或明确提供 Jira/Lark 导出表后改走离线审计。
+需要用户在可被控制的浏览器中打开并登录 Jira、提供 Jira API 账号 Token（如 jira 项目 .env），或明确提供 Jira/Lark 导出表后改走离线审计。
 ```
 
-Do not continue with anonymous Jira API data. Do not use old local TSV/CSV files as a replacement for live scan.
+Do not continue with anonymous Jira API data. Do not use old local TSV/CSV files as a replacement for live scan. Do not skip the scripted path just because browser/CDP is available. Do not use browser/CDP for a login/access sanity check when workspace `.env` / `.env.local` credentials are present or have not yet been attempted.
+
+### REST API Mode Evidence Boundary
+
+Authenticated REST API mode is a full live-scan source for Jira data (fields, comments, changelog, issue links, linked bugs). The Jira token alone cannot open Lark docs, but the Lark app token can — see `Lark Document Fetch (App Token Mode)` below. Use both together for a complete live scan:
+
+- Jira REST (Jira `.env`) for issue data; Lark app token (`eff` `.env`) for docx/wiki document content.
+- Readable docx/table/text content is assessed normally per `references/sop-rules.md`. The only residual gap is whiteboard (画板) node text, which needs a `board:whiteboard:node:read` scope the current app lacks — mark those `待确认：画板节点不可读`.
+- State the board-scope limitation once in the monthly summary, not in `三、关键确认项`.
 
 ## Default Jira Query
 
-Use Jira `cf[]` field ids by default. Do not use Chinese custom-field names as the first attempt, because field display names, locale, and punctuation can drift.
-
-Confirmed Jira field mapping:
-
-| Business field | REST field | JQL field |
-|---|---|---|
-| 测试人员（多选） | `customfield_11622` | `cf[11622]` |
-| 预计测试开始时间 | `customfield_12304` | `cf[12304]` |
-| 预计测试完成时间 | `customfield_11617` | `cf[11617]` |
-
-Default monthly KPI live-scan JQL:
+Default Jira live-scan JQL pattern:
 
 ```jql
 project = WWLD
-AND cf[11622] in ("<tester>")
-AND cf[12304] >= "<month_start>"
-AND cf[12304] < "<next_month_start>"
-ORDER BY cf[12304] ASC, key ASC
+AND 测试人员（多选） = "<tester>"
+AND 预计测试开始时间 >= <month_start>
+AND 预计测试开始时间 < <next_month_start>
+ORDER BY 预计测试开始时间 ASC, key ASC
 ```
 
-Use `maxResults=1` and a strict field whitelist for the first probe:
-
-```text
-key,summary,status,customfield_11622,customfield_12304,customfield_11617
-```
-
-If the default JQL returns results and `customfield_11622` contains the target tester, use the same JQL for the full paged scan.
-
-If the default JQL returns 0 results, probe only the tester-value syntax in this order. Keep the project and date conditions unchanged:
-
-```jql
-project = WWLD AND cf[11622] = "<tester>" AND cf[12304] >= "<month_start>" AND cf[12304] < "<next_month_start>" ORDER BY cf[12304] ASC, key ASC
-project = WWLD AND cf[11622] in ("<display_name>") AND cf[12304] >= "<month_start>" AND cf[12304] < "<next_month_start>" ORDER BY cf[12304] ASC, key ASC
-project = WWLD AND cf[11622] = "<display_name>" AND cf[12304] >= "<month_start>" AND cf[12304] < "<next_month_start>" ORDER BY cf[12304] ASC, key ASC
-```
-
-Only if all `cf[]` probes fail due to JQL syntax or field-value errors, try the Chinese-name fallback:
-
-```jql
-project = WWLD
-AND "测试人员（多选）" in ("<tester>")
-AND "预计测试开始时间" >= "<month_start>"
-AND "预计测试开始时间" < "<next_month_start>"
-ORDER BY "预计测试开始时间" ASC, key ASC
-```
-
-Do not use `created`, `resolved`, status transition date, Jira assignee, reporter, or creator as the monthly scope filter unless the user explicitly changes the audit口径.
-
-If the tester field is unreliable after these probes, use the QA schedule/Lark monthly demand list or a user-provided `测试介入时间 + JIRA单` seed list as the scope source, then enrich each Jira issue individually.
+If the tester field is unreliable, use the QA schedule/Lark monthly demand list or a user-provided `测试介入时间 + JIRA单` seed list as the scope source, then enrich each Jira issue individually.
 
 ## Default KPI Tester Roster
 
@@ -167,7 +143,24 @@ Avoid large all-field responses. Do not request `fields=*all` for monthly audits
 
 Use this sequence:
 
-1. Fetch Jira field metadata once with `/rest/api/2/field`, map required custom fields, and cache the mapping for the current run.
+1. Fetch Jira field metadata once with `/rest/api/2/field`, map required custom fields, and cache the mapping for the current run. Known mapping for `jira.weex.tech` (re-verify against `/rest/api/2/field` if a fetch fails):
+
+   | 字段 | Field ID |
+   |---|---|
+   | 测试人员（多选） | `customfield_11622` |
+   | 测试人员（单选） | `customfield_11606` |
+   | 预计测试开始时间 | `customfield_12304` |
+   | 预计测试完成时间 | `customfield_11617` |
+   | 预计提测时间 | `customfield_11616` |
+   | 预计验收完成时间 | `customfield_11618` |
+   | 预计发布时间 | `customfield_11619` |
+   | 发布完成时间 | `customfield_12600` |
+   | 研发人员 | `customfield_11615` |
+   | 业务模块 | `customfield_12401` |
+   | Story Points | `customfield_10106`（备用 `customfield_12503`） |
+   | 测试进度 | `customfield_12201` |
+
+   In JQL prefer the `cf[11622]` form over Chinese field names, e.g. `project = WWLD AND cf[11622] = "rain107774" AND cf[12304] >= "2026-05-01" AND cf[12304] < "2026-06-01"`. Note: `issuetype = "故障"` is not a valid JQL value on this instance; find associated bugs through issue links or `summary ~` search instead.
 2. Fetch monthly demand rows with a strict field whitelist:
    - `summary`, `status`, `assignee`, `reporter`, `priority`, `issuetype`, `description`, `comment`, `issuelinks`, `labels`, `components`, `created`, `updated`;
    - tester owner, development owner, business module, Story Points, planned test start/end, submission date, acceptance/release dates, test progress.
@@ -175,7 +168,7 @@ Use this sequence:
 4. For group/all-tester audits, scan one tester-month at a time.
 5. Fetch heavy data only when needed:
    - changelog for completion/status transition evidence;
-   - sampled linked Bugs for Bug quality evidence, following the sampling rule below;
+   - linked Bugs for Bug quality evidence;
    - Lark/Google docs only when links match the evidence-link rules below.
 6. If a response is truncated, retry with fewer fields or smaller page size. Never continue from a truncated JSON response.
 
@@ -246,9 +239,7 @@ Open self-test/submission evidence only when adjacent wording includes:
 提测文档
 ```
 
-For self-test/submission evidence, do not open the linked document by default. If Jira/Lark visible text has one of the adjacent keywords above and a URL/attachment/card link is present, mark `有自测报告`. Open the link only when the label is ambiguous and the result can change a deduction.
-
-For test-report evidence, do not open the linked document by default. If Jira/Lark visible text has one of the adjacent keywords below and a URL/attachment/card link is present, mark `有测试报告`:
+Open test-report evidence when adjacent wording includes:
 
 ```text
 测试报告
@@ -257,9 +248,46 @@ For test-report evidence, do not open the linked document by default. If Jira/La
 测试结论
 ```
 
-If there is only a plain Jira comment such as `测试完成`, `验证通过`, or `待发布` without a report/conclusion link, classify it by `references/sop-rules.md` as `仅测试完成备注` or `有测试结论`; do not open unrelated links to prove a report.
-
 When Jira comments contain `验收问题`, `验收问题清单`, `问题跟踪表`, or similar wording plus a Lark/wiki/base URL, open the issue list and classify rows using `references/acceptance-issue-list.md`.
+
+## Lark Document Fetch (App Token Mode)
+
+Preferred way to open Lark docs without a browser/CDP. Lark documents on `*.larksuite.com` (international) can be read with a Lark app `tenant_access_token`, no browser needed.
+
+Credentials: `app_id` / `app_secret` from workspace `.env`, workspace `.env.local`, or `/Users/gabriel/Downloads/weexpr/eff/.env` (the `eff` backend's Lark app), in that order. Never print the secret. Open-API base is region-specific:
+
+- `*.sg.larksuite.com` / international → `https://open.larksuite.com`
+- `*.feishu.cn` (China) → `https://open.feishu.cn`
+
+Helpers:
+
+- `scripts/collect_month.py <tester> <YYYY-MM>` — end-to-end live collector: Jira REST + Lark app token → evidence TSV for `audit_monthly_sop.py`. This is the primary live path; it classifies every SOP column deterministically and only leaves truly-ambiguous fields as `待确认`.
+- `scripts/lark_doc_fetch.py <url>` — resolve a single Lark URL and return text + structural flags (used internally by the collector; also handy for spot checks).
+
+```bash
+python3 scripts/lark_doc_fetch.py "https://bsgwewe588io.sg.larksuite.com/wiki/<token>"
+```
+
+Fetch protocol:
+
+1. `POST /open-apis/auth/v3/tenant_access_token/internal` with `{app_id, app_secret}` → `tenant_access_token` (cache ~2h).
+2. For a `/wiki/<node_token>` URL, resolve first: `GET /open-apis/wiki/v2/spaces/get_node?token=<node_token>` → `obj_type` + `obj_token`.
+3. For a docx (`/docx/<id>` or wiki obj_type=`docx`): `GET /open-apis/docx/v1/documents/<id>/raw_content` → plain text; `GET /open-apis/docx/v1/documents/<id>/blocks` → block list (detect structure).
+4. Block-type signals: `43` = board/画板(whiteboard), `31` = table, `27` = image, `1` = page.
+
+### Board (画板) Scope Limitation — Important
+
+The `eff` Lark app has docx/wiki read scopes but **not** `board:whiteboard:node:read`. So:
+
+- A test-case doc that is just a title + a board block (`raw_content` length is only the title, blocks show `has_board=true`) means the cases live in a whiteboard whose node text the app cannot read.
+- Do not classify such a doc as `缺失用例` (a board exists) and do not assert `有效` (cannot see nodes). Use the row-level label `用例为画板形式（board 对象存在，应用无 board 节点读取权限）` and mark case-content validity `待确认：画板节点不可读`.
+- When a test-case doc has a real text/table body (e.g. a full 全局影响面评估 table), assess those readable sections normally per `references/sop-rules.md`; only the in-board case nodes stay `待确认`.
+
+### Self-Test / Report Reclassification After Reading
+
+When the Jira comment only had a bare URL but the opened document is itself a structured developer self-test report (`自测范围` / `自测结果` / `结论：可提测`), treat it as `有自测报告`. Reading the doc beats the bare-link heuristic. Likewise, when a labeled `测试报告` link returns `131005 not found` (or otherwise cannot resolve), use `待确认：测试报告链接无法访问`, not `有测试报告`.
+
+State the board-scope limitation once in the monthly summary, never in `三、关键确认项`.
 
 ## Associated Bug Collection
 
@@ -274,35 +302,6 @@ issuetype = BUG AND issue in linkedIssues(<DEMAND_KEY>)
 ```
 
 Do not count every issue key mentioned in comments as an associated Bug. If the comment context says the issue is an `插入项`, `并行需求`, `优先处理`, `延期风险`, `阻塞项`, or another interrupted/parallel demand, record it under risk synchronization instead.
-
-## Associated Bug Quality Sampling
-
-For Bug record quality, do not open every associated Bug by default. Use this fixed sampling rule:
-
-```text
-total Bugs = N
-if N = 0: no Bug quality detail check
-if 1 <= N <= 3: open all Bugs
-if N > 3: open max(3, ceil(N * 30%)) Bugs
-```
-
-Sampling priority:
-
-1. Bugs explicitly marked `Prod Bug`, `线上问题`, `线上漏测`, P0, or P1.
-2. Bugs with higher priority/severity.
-3. Bugs most clearly linked from the demand's Jira issue links.
-4. Newest created Bugs when priority/link evidence is otherwise equal.
-
-Only sampled Bugs may be judged `规范` or `不规范`. Unopened Bugs must not be called non-compliant.
-
-Use row-level wording such as:
-
-```text
-无关联Bug
-关联 Bug N 个；已抽查 M 个；规范 X 个，不规范 Y 个；主要问题：缺复现步骤、缺实际结果、缺预期结果
-关联 Bug N 个；已抽查 M 个；规范 X 个，不规范 0 个
-关联 Bug N 个；待确认：Bug详情未打开
-```
 
 ## Live Scan Versus Offline Scripts
 

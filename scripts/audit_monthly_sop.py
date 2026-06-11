@@ -550,11 +550,15 @@ def summarize(results):
         monthly_suggestions.append(f"标准流程未见自测报告共 {missing_self_test} 个需求，按门禁规则每次扣 5 分，单项月度封顶 15 分。")
     missing_reports = row_finding_counts.get("缺测试报告/结论", 0)
     completion_only = row_finding_counts.get("仅测试完成备注", 0)
+    conclusion_only = row_finding_counts.get("有测试结论", 0)
+    standard_report_misses = issue_counts.get("标准流程缺测试报告", 0)
     report_pending = sum(count for finding, count in row_finding_counts.items() if finding.startswith("待确认：链接无法打开"))
     if missing_reports:
         monthly_suggestions.append(f"缺测试报告/结论共 {missing_reports} 个需求，标准流程按缺测试报告评估。")
     if completion_only:
         monthly_suggestions.append(f"仅测试完成备注共 {completion_only} 个需求，标准流程不等同于完整测试报告。")
+    if conclusion_only:
+        monthly_suggestions.append(f"仅测试结论共 {conclusion_only} 个需求，标准流程不等同于完整测试报告。")
     if report_pending:
         monthly_suggestions.append(f"测试报告链接无法确认共 {report_pending} 个需求，需确认链接权限和内容。")
     concise_kpi_rows = []
@@ -574,28 +578,34 @@ def summarize(results):
                     "建议扣分": "扣 15 分",
                 }
             )
-    if completion_only:
-        concise_kpi_rows.append(
-            {
-                "项目": "测试专业能力与规范执行",
-                "问题": f"仅测试完成备注 {completion_only} 个，标准流程不等同完整测试报告",
-                "建议扣分": "建议扣 3 分",
-            }
-        )
+    gate_quality_parts = []
+    gate_quality_deduction = 0
     if missing_gate_evidence:
-        concise_kpi_rows.append(
-            {
-                "项目": "严格执行质量门禁和缺陷闭环",
-                "问题": f"标准流程准入/冒烟/准出等关键门禁无留痕 {missing_gate_evidence} 个",
-                "建议扣分": f"扣 {missing_gate_evidence * 5} 分",
-            }
-        )
+        gate_quality_parts.append(f"标准流程准入/冒烟/准出等关键门禁无留痕 {missing_gate_evidence} 个")
+        gate_quality_deduction += missing_gate_evidence * 5
     if missing_self_test:
+        gate_quality_parts.append(f"标准流程未见自测报告 {missing_self_test} 个")
+        gate_quality_deduction += missing_self_test * 5
+    if standard_report_misses:
+        report_details = []
+        if missing_reports:
+            report_details.append(f"缺测试报告/结论 {missing_reports} 个")
+        if completion_only:
+            report_details.append(f"仅测试完成备注 {completion_only} 个")
+        if conclusion_only:
+            report_details.append(f"仅测试结论 {conclusion_only} 个")
+        detail_text = f"（{'，'.join(report_details)}）" if report_details else ""
+        gate_quality_parts.append(f"标准流程缺测试报告 {standard_report_misses} 个{detail_text}")
+        gate_quality_deduction += standard_report_misses * 3
+    if gate_quality_parts:
+        gate_quality_capped = min(gate_quality_deduction, 15)
+        if gate_quality_deduction > gate_quality_capped:
+            gate_quality_parts.append("严格执行质量门禁和缺陷闭环子项按 15 分上限计")
         concise_kpi_rows.append(
             {
                 "项目": "严格执行质量门禁和缺陷闭环",
-                "问题": f"标准流程未见自测报告 {missing_self_test} 个",
-                "建议扣分": f"扣 {min(missing_self_test * 5, 15)} 分",
+                "问题": "；".join(gate_quality_parts),
+                "建议扣分": f"扣 {gate_quality_capped} 分",
             }
         )
     if report_pending:
@@ -732,6 +742,172 @@ def score_summary(summary):
     return f"预计总扣分 {qualifier}{deduction_text} 分，预计加分 +{bonus_text} 分，预计最终得分 {qualifier}{final_text} 分。"
 
 
+MODULES = [
+    ("业务交付质量与效能", 30),
+    ("重点工作", 25),
+    ("测试专业能力与规范执行", 45),
+]
+
+
+def add_range(a, b):
+    if not a:
+        return b
+    if not b:
+        return a
+    return (a[0] + b[0], a[1] + b[1])
+
+
+def clamp_range(value, low, high):
+    return (max(low, min(high, value[0])), max(low, min(high, value[1])))
+
+
+def format_range(value):
+    if not value:
+        return "0"
+    if value[0] == value[1]:
+        return format_points(value[0])
+    return f"{format_points(value[0])}-{format_points(value[1])}"
+
+
+def module_for_kpi_item(item):
+    text = norm(item)
+    if "业务交付质量与效能" in text:
+        return "业务交付质量与效能"
+    if "重点" in text:
+        return "重点工作"
+    return "测试专业能力与规范执行"
+
+
+def deduction_basis(row):
+    issue = str(row.get("问题") or "").strip()
+    suggestion = str(row.get("建议扣分") or "").strip()
+    if suggestion.startswith("扣"):
+        return f"{issue}，{suggestion}"
+    return issue
+
+
+def workload_bonus_ranges(summary):
+    bonus = None
+    basis = []
+    for row in summary.get("workload_bonus", []):
+        days = parse_number(str(row.get("当月工时统计/天")))
+        suggestion = workload_bonus_suggestion(days)
+        if suggestion == "+1 分":
+            bonus = add_range(bonus, (1, 1))
+            basis.append(f"{workload_threshold_text(days)}，加 1 分")
+        elif suggestion.startswith("3-5"):
+            bonus = add_range(bonus, (3, 5))
+            basis.append(f"{workload_threshold_text(days)}，建议加 3-5 分")
+    return bonus or (0, 0), basis
+
+
+def extract_jira_key(text):
+    match = re.search(r"\b[A-Z]+-\d+\b", str(text or ""))
+    return match.group(0) if match else str(text or "").strip()
+
+
+def keys_text(keys):
+    keys = [key for key in keys if key]
+    if not keys:
+        return ""
+    if len(keys) <= 6:
+        return "、".join(keys)
+    return "、".join(keys[:6]) + f" 等 {len(keys)} 个需求"
+
+
+def module_score_summary(summary, results):
+    deductions = {name: (0, 0) for name, _ in MODULES}
+    basis = {name: [] for name, _ in MODULES}
+    for row in summary.get("concise_kpi_rows", []):
+        deduction = parse_score_range(row.get("建议扣分", ""), "扣")
+        if not deduction:
+            continue
+        module = module_for_kpi_item(row.get("项目", ""))
+        deductions[module] = add_range(deductions[module], deduction)
+        basis[module].append(deduction_basis(row))
+
+    bonus, bonus_basis = workload_bonus_ranges(summary)
+    basis["业务交付质量与效能"].extend(bonus_basis)
+
+    bug_keys = []
+    for result in results:
+        bug_text = str(result.get("row", {}).get("Bug记录是否规范", ""))
+        match = re.search(r"不规范\s*(\d+)\s*个", bug_text)
+        if match and int(match.group(1)) > 0:
+            bug_keys.append(extract_jira_key(result.get("jira")))
+    if bug_keys and not basis["重点工作"]:
+        basis["重点工作"].append("暂未确认重点需求范围，Bug 规范问题暂不计入扣分")
+
+    rows = []
+    score_total = (0, 0)
+    deduction_total = (0, 0)
+    for name, max_score in MODULES:
+        module_bonus = bonus if name == "业务交付质量与效能" else (0, 0)
+        module_score = (
+            max_score - deductions[name][1] + module_bonus[0],
+            max_score - deductions[name][0] + module_bonus[1],
+        )
+        module_score = clamp_range(module_score, 0, max_score)
+        score_total = add_range(score_total, module_score)
+        deduction_total = add_range(deduction_total, deductions[name])
+        rows.append(
+            {
+                "模块": name,
+                "满分": max_score,
+                "得分": module_score,
+                "主要依据": "；".join(basis[name]) if basis[name] else "无已确认扣分项",
+            }
+        )
+    return rows, score_total, deduction_total, bonus
+
+
+def infer_scope_text(rows, summary):
+    testers = sorted({first_value(row, ["测试人员", "测试介入人", "人员", "QA"]) for row in rows} - {""})
+    if not testers:
+        testers = sorted({str(row.get("测试人员") or "") for row in summary.get("workload_bonus", [])} - {""})
+    months = sorted({str(row.get("月份") or "") for row in summary.get("workload_bonus", [])} - {""})
+    if not months:
+        for row in rows:
+            dt = parse_date(first_value(row, ["时间", "预计测试开始时间", "测试介入时间"]))
+            if dt:
+                months.append(dt.strftime("%Y-%m"))
+                break
+    tester_text = "、".join(testers) if testers else "目标人员"
+    month_text = "、".join(months) if months else "目标月份"
+    return f"本次审计范围为 {tester_text} 在 {month_text} 的 Jira/Lark 记录，共 {len(rows)} 个需求。"
+
+
+def pending_summary_sentence(results):
+    online = []
+    overdue = []
+    bug_norm = []
+    for result in results:
+        row = result.get("row", {})
+        key = extract_jira_key(result.get("jira"))
+        if first_value(row, ["验收/线上问题"]) not in ("", "-", "无"):
+            online.append(key)
+        if str(first_value(row, ["实际测试完成"])).startswith("超期"):
+            overdue.append(key)
+        bug_text = str(row.get("Bug记录是否规范", ""))
+        match = re.search(r"不规范\s*(\d+)\s*个", bug_text)
+        if match and int(match.group(1)) > 0:
+            bug_norm.append(key)
+    parts = []
+    if online:
+        parts.append(f"{keys_text(online)} 的验收/线上问题责任归属")
+    if overdue:
+        parts.append(f"{keys_text(overdue)} 的超期是否测试侧原因")
+    if bug_norm:
+        parts.append(f"{keys_text(bug_norm)} 的重点需求 Bug 规范扣分适用范围")
+    if not parts:
+        manual_keys = [extract_jira_key(result.get("jira")) for result in results if result.get("manual_confirmations")]
+        if manual_keys:
+            parts.append(f"{keys_text(manual_keys)} 的待确认项")
+    if not parts:
+        return ""
+    return "该分数暂未计入待确认项：" + "、".join(parts) + "。"
+
+
 def summarize_workload_bonus(rows):
     by_person_month = {}
     for row in rows:
@@ -823,18 +999,33 @@ def markdown_report(rows, results, summary):
     lines = []
     lines.append("一、月度结论摘要")
     lines.append("")
-    lines.append(
-        f"本月共统计 {len(rows)} 个需求，有问题单量 {sum(1 for r in results if r['issues'])} 个，"
-        f"待确认项 {summary['manual_confirmation_count']} 个。"
-    )
-    workload_bonus = summary.get("workload_bonus", [])
-    if workload_bonus:
-        bonus_text = "；".join(
-            f"{row['测试人员']} {workload_threshold_text(parse_number(str(row['当月工时统计/天'])))}，{workload_bonus_suggestion(parse_number(str(row['当月工时统计/天'])))}"
-            for row in workload_bonus
+    lines.append(infer_scope_text(rows, summary))
+    lines.append("")
+    module_rows, total_score, total_deduction, total_bonus = module_score_summary(summary, results)
+    lines.append(f"当前明确测算得分为 {format_range(total_score)}/100，其中：")
+    lines.append("")
+    lines.append("| 模块 | 得分 | 主要依据 |")
+    lines.append("|---|---:|---|")
+    for row in module_rows:
+        lines.append(
+            "| {module} | {score}/{max_score} | {basis} |".format(
+                module=markdown_cell(row["模块"]),
+                score=markdown_cell(format_range(row["得分"])),
+                max_score=markdown_cell(row["满分"]),
+                basis=markdown_cell(row["主要依据"]),
+            )
         )
-        lines.append(bonus_text + "。")
-    lines.append(score_summary(summary))
+    lines.append(
+        "| 合计 | {score}/100 | 明确扣 {deduction} 分，加 {bonus} 分 |".format(
+            score=markdown_cell(format_range(total_score)),
+            deduction=markdown_cell(format_range(total_deduction)),
+            bonus=markdown_cell(format_range(total_bonus)),
+        )
+    )
+    pending_sentence = pending_summary_sentence(results)
+    if pending_sentence:
+        lines.append("")
+        lines.append(pending_sentence)
     lines.append("")
 
     lines.append("二、扣分/加分建议")
@@ -853,6 +1044,7 @@ def markdown_report(rows, results, summary):
             )
     else:
         lines.append("| 暂不扣 | SOP留痕 | 未发现明显 SOP 缺失 | 暂不扣 |")
+    workload_bonus = summary.get("workload_bonus", [])
     if workload_bonus:
         for row in workload_bonus:
             lines.append(

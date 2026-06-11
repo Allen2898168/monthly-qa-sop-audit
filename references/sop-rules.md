@@ -83,8 +83,8 @@ Check each scoring standard separately. This indicator is worth 15 points.
 
 1. 提测前无法产出测试用例
    - Evidence field: `提测前完成测试用例产出`.
-   - Satisfied: before test submission/execution, Jira/Lark contains a test case link, smoke case link, or explicit test point link that can support testing.
-   - Not satisfied: no test case/test point link is recorded before entering test execution, or the record only says "有" without a traceable link/location.
+   - Satisfied: before the planned test start (`预计测试开始时间`), Jira/Lark contains a test case link, smoke case link, or explicit test point link that can support testing. If planned test start is absent, use the first actual transition into testing as the fallback boundary.
+   - Not satisfied: no test case/test point link is recorded before the planned test start or fallback test-entry boundary, or the record only says "有" without a traceable link/location.
    - Deduction: monthly each occurrence deducts 2 points; more than 3 demands caps this item at 5 points deducted.
 
 2. 因测试侧原因影响项目节奏
@@ -136,8 +136,7 @@ Apply per key demand.
 1. Bug 未记录、Jira Bug 提单不符合规范
    - Satisfied: bug has clear title, repro steps, actual/expected result, severity/priority, owner/status.
    - Not satisfied: missing bug record, empty description, external-link-only description, one-line phenomenon only, unclear repro, missing actual/expected result, or development cannot reproduce based on description.
-   - Deduction: 1 point per non-compliant Bug record found in the Bug quality check, capped at 5 points when more than 5 non-compliant Bug records are found.
-   - Check scope: use the associated-Bug sampling rule in `references/jira-sourcing.md`. If a demand has 1-3 associated Bugs, check all. If it has more than 3 associated Bugs, check at least 3 and 30% of the total, rounded up. Do not judge unopened Bugs as non-compliant.
+   - Deduction: 1 point per non-compliant Bug record, capped at 5 points when more than 5 non-compliant Bug records are found. For KPI scoring, check every associated Bug under the demand, not a sample.
 
 2. 测试场景遗漏导致验收未通过
    - Satisfied: no acceptance failure caused by missed test scenario.
@@ -372,11 +371,11 @@ Otherwise mark `待确认`.
 
 For `测试报告`, use only these labels:
 
-- `有测试报告`: visible Jira/Lark text contains `测试报告`, `测试完成报告`, `测试总结`, or equivalent wording, and an adjacent URL/attachment/card link exists. Do not open the report body by default.
+- `有测试报告`: a full test report body or clear test report link exists.
 - `有测试结论`: test scope/result/risk or residual conclusion is clear, but no full report link is visible.
 - `仅测试完成备注`: only short completion text is visible, such as `测试完成`, `验证通过`, `待发布`, `已发布`, or `已上线`.
 - `缺测试报告/结论`: neither a report nor a clear conclusion is visible.
-- `待确认：链接无法打开`: a candidate report link exists but cannot be opened when opening is explicitly needed to disambiguate evidence. Do not use this label merely because the report body was not read.
+- `待确认：链接无法打开`: a candidate link exists but cannot be opened or verified.
 
 For standard flow, only `有测试报告` satisfies the test-report requirement. `有测试结论` and `仅测试完成备注` are insufficient for standard flow unless an approved exception is explicitly recorded. For simplified flow, `有测试结论` or `仅测试完成备注` can satisfy the completion-evidence requirement when acceptance evidence is present.
 
@@ -384,9 +383,9 @@ For standard flow, only `有测试报告` satisfies the test-report requirement.
 
 For `自测报告`, use only these labels:
 
-- `有自测报告`: Jira/Lark visible text explicitly contains `自测报告`, `自测文档`, `自测结果`, `提测报告`, or `提测文档`, and an adjacent URL/attachment/card link exists. Do not open the linked document by default.
+- `有自测报告`: Jira/Lark comments, attachments, or adjacent link text explicitly contains `自测报告`, `自测文档`, `自测结果`, `提测报告`, or `提测文档`.
 - `缺自测报告`: no explicit self-test/submission-report label is present. A bare URL, PRD/TRD link, product self-test note, or unlabeled document link must be treated as missing, not `待确认`.
-- `待确认：链接无法打开`: a link explicitly labeled as self-test/submission-report exists but cannot be opened when opening is explicitly needed to disambiguate evidence. Do not use this label merely because the self-test/submission-report body was not read.
+- `待确认：链接无法打开`: a link explicitly labeled as self-test/submission-report exists but cannot be opened or verified.
 
 For standard-flow demands, missing self-test/submission evidence counts as a gate-trace miss under `严格执行质量门禁和缺陷闭环`.
 
@@ -409,6 +408,23 @@ The `二、扣分/加分建议` table columns are:
 ```text
 结论 | 项目 | 问题 | 建议
 ```
+
+The `一、月度结论摘要` section must include a module score table before detailed deductions:
+
+```text
+本次审计范围为 <tester> 在 <YYYY-MM> 的 Jira/Lark 记录，共 <N> 个需求。
+
+当前明确测算得分为 <score>/100，其中：
+
+| 模块 | 得分 | 主要依据 |
+|---|---:|---|
+| 业务交付质量与效能 | <score>/30 | <deduction/bonus basis> |
+| 重点工作 | <score>/25 | <deduction basis or 暂未确认重点需求范围，Bug 规范问题暂不计入扣分> |
+| 测试专业能力与规范执行 | <score>/45 | <deduction basis> |
+| 合计 | <score>/100 | 明确扣 <N> 分，加 <N> 分 |
+```
+
+After the table, include only score-changing pending items in one sentence. Generate pending Jira keys from the current audit evidence only; do not reuse example keys from prior audits. Do not mix evidence/tool limitations into the score sentence.
 
 The `四、逐单检查表` columns are:
 
@@ -451,10 +467,8 @@ Row-level `扣分项` should only record the factual miss for the demand:
 For `Bug记录是否规范`, use row-level wording like:
 
 - `无关联Bug`
-- `关联 Bug N 个；已抽查 M 个；规范 X 个，不规范 Y 个；主要问题：缺复现步骤、缺实际结果、缺预期结果`
-- `关联 Bug N 个；已抽查 M 个；规范 X 个，不规范 Y 个；主要问题：描述为空、仅贴外部链接`
-- `关联 Bug N 个；已抽查 M 个；规范 X 个，不规范 0 个`
-- `关联 Bug N 个；待确认：Bug详情未打开`
+- `关联 Bug N 个；规范 X 个，不规范 Y 个；主要问题：缺复现步骤、缺实际结果、缺预期结果`
+- `关联 Bug N 个；规范 X 个，不规范 Y 个；主要问题：描述为空、仅贴外部链接`
 
 Do not write monthly threshold conclusions into a row, for example:
 
