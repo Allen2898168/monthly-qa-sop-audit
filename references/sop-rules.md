@@ -321,7 +321,7 @@ Use these result labels:
 ### 3. 严格执行质量门禁和缺陷闭环，15 分
 
 1. 标准流程未输出测试报告，或简化流程未同步测试完成结论
-   - Satisfied: standard flow has test report; simplified flow has Jira/Lark completion conclusion. For simplified-flow demands whose testing starts before `2026-07-01`, concise completion handoff notes such as `测试进度100%`, `stg测试完成`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` count as valid completion conclusions.
+   - Satisfied: standard flow has test report; simplified flow has Jira/Lark completion conclusion. For simplified-flow demands whose testing starts before `2026-07-01`, concise environment / handoff notes such as `测试进度100%`, `stg测试完成`, `stg环境测试通过`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` count as valid completion conclusions.
    - Not satisfied: missing required report/conclusion.
    - Deduction: 3 points.
 
@@ -373,7 +373,7 @@ Otherwise mark `待确认`.
 For `测试报告`, use only these labels:
 
 - `有测试报告`: a full test report body or clear test report link exists.
-- `有测试结论`: test scope/result/risk or residual conclusion is clear, but no full report link is visible. For simplified-flow demands before `2026-07-01`, `测试完成` / `测试通过` plus `测试记录` / `测试内容`, `测试进度100%`, or concise environment / handoff conclusions such as `stg测试完成`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` also count as a test conclusion.
+- `有测试结论`: test scope/result/risk or residual conclusion is clear, but no full report link is visible. For simplified-flow demands before `2026-07-01`, `测试完成` / `测试通过` plus `测试记录` / `测试内容`, `测试进度100%`, or concise environment / handoff conclusions such as `stg测试完成`, `stg环境测试通过`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` also count as a test conclusion.
 - `仅测试完成备注`: only short completion text is visible, such as `测试完成`, `验证通过`, `待发布`, `已发布`, or `已上线`.
 - `缺测试报告/结论`: neither a report nor a clear conclusion is visible.
 - `待确认：链接无法打开`: a candidate link exists but cannot be opened or verified.

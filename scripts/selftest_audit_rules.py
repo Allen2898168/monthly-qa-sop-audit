@@ -250,6 +250,11 @@ def main():
         "测试完成并指定下一处理人 is a simplified-flow completion conclusion",
     )
     assert_equal(
+        audit.classify_test_report("stg环境测试通过"),
+        "有测试结论",
+        "environment completion comments are simplified-flow completion conclusions",
+    )
+    assert_equal(
         audit.classify_test_report("测试完成时间顺延一天"),
         "缺测试报告/结论",
         "schedule extension wording must not be treated as completion evidence",
@@ -266,6 +271,7 @@ def main():
                         "comments": [
                             {"body": "测试完成 麻烦[~francis107751]验收"},
                             {"body": "测试完成 麻烦[~francis107751]"},
+                            {"body": "stg环境测试通过"},
                         ]
                     }
                 }
