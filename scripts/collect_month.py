@@ -193,6 +193,12 @@ def user_names(value):
     return value or ""
 
 
+def option_value(value):
+    if isinstance(value, dict):
+        return value.get("value") or value.get("name") or value.get("displayName") or ""
+    return value or ""
+
+
 def status_transitions(issue):
     out = []
     for h in issue.get("changelog", {}).get("histories", []):
@@ -325,9 +331,23 @@ def classify_self_test(links, docs):
 REPORT_FULL_RE = re.compile(r"测试结论|测试评估|测试计划|执行情况|是否通过|准出|测试场景|预期结果")
 
 
-def classify_test_report(links, docs):
+def classify_test_report(links, docs, issue=None):
     cand = [lk for lk in links if lk["category"] == "测试报告"]
     if not cand:
+        if issue:
+            best_label = None
+            label_rank = {"有测试报告": 3, "有测试结论": 2, "仅测试完成备注": 1}
+            for comment in issue.get("fields", {}).get("comment", {}).get("comments", []):
+                body = comment.get("body") or ""
+                if AUDIT.SCHEDULE_ONLY_COMPLETION_RE.search(body):
+                    continue
+                label = AUDIT.classify_test_report(body)
+                if label in label_rank and (best_label is None or label_rank[label] > label_rank[best_label]):
+                    best_label = label
+                    if best_label == "有测试报告":
+                        break
+            if best_label:
+                return best_label
         return "缺测试报告/结论"
     for lk in cand:
         d = docs.get(lk["url"])
@@ -493,7 +513,7 @@ def collect(tester, month, jira, fetch_lark=True, verbose=True):
         case_written, case_note = classify_case_doc(case_doc)
         # If no case doc but the test report carries execution scenarios, that is a
         # valid test-execution record per the 用例未编写 boundary.
-        report_label = classify_test_report(links, docs)
+        report_label = classify_test_report(links, docs, issue)
         if case_doc is None:
             tr_links = [lk for lk in links if lk["category"] == "测试报告"]
             for lk in tr_links:
@@ -523,9 +543,9 @@ def collect(tester, month, jira, fetch_lark=True, verbose=True):
         if nonstd:
             bug_summary += "；不规范：" + "、".join(nonstd)
 
-        sp = fld(f, "sp1") or fld(f, "sp2")
+        sp = option_value(fld(f, "sp1") or fld(f, "sp2"))
         module = fld(f, "module")
-        module = module.get("value") if isinstance(module, dict) else module
+        module = option_value(module)
         # Reuse the engine's own rule to infer 流程类型 from the title (which the
         # engine can't read from the JIRA单 cell, since that holds the key).
         flow_type = AUDIT.infer_process_type({

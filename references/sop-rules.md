@@ -308,7 +308,7 @@ Use these result labels:
 
 1. 用例评审不通过
    - Satisfied: review passes, or review issues are revised and confirmed closed.
-   - Exception: when `Story Points < 3`, use-case review is not required. The simplified evidence requirement is a test completion conclusion and acceptance note.
+   - Exception: when `Story Points <= 3` or the demand is classified as `简化流程`, use-case review is not required. The simplified evidence requirement is a test completion conclusion and acceptance note.
    - Not satisfied: rejected due to testing-side use-case quality, such as missing core flow, interface data, boundary condition, exception path, permission, or acceptance scenario.
    - Evidence wording: `用例/评审记录` must explicitly say `用例评审通过` or `用例评审不通过` when the review conclusion is visible. If only a review trace exists but the result is unclear, write `未见用例评审结论`.
    - Deduction: monthly 1-3 occurrences deduct 3 points each; more than 3 occurrences means this item gets 0 points.
@@ -321,7 +321,7 @@ Use these result labels:
 ### 3. 严格执行质量门禁和缺陷闭环，15 分
 
 1. 标准流程未输出测试报告，或简化流程未同步测试完成结论
-   - Satisfied: standard flow has test report; simplified flow has Jira/Lark completion conclusion.
+   - Satisfied: standard flow has test report; simplified flow has Jira/Lark completion conclusion. For simplified-flow demands whose testing starts before `2026-07-01`, concise completion handoff notes such as `测试进度100%`, `stg测试完成`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` count as valid completion conclusions.
    - Not satisfied: missing required report/conclusion.
    - Deduction: 3 points.
 
@@ -363,6 +363,7 @@ Standard flow (`标准流程`) if any condition is met:
 Simplified flow (`简化流程`) if no standard-flow condition is met and any condition is met:
 
 - Issue title contains `快速优化`.
+- Jira `Story Points` <= 3.
 - Testing cycle <= 1 working day and `Story Points` < 3.
 
 Otherwise mark `待确认`.
@@ -372,12 +373,16 @@ Otherwise mark `待确认`.
 For `测试报告`, use only these labels:
 
 - `有测试报告`: a full test report body or clear test report link exists.
-- `有测试结论`: test scope/result/risk or residual conclusion is clear, but no full report link is visible.
+- `有测试结论`: test scope/result/risk or residual conclusion is clear, but no full report link is visible. For simplified-flow demands before `2026-07-01`, `测试完成` / `测试通过` plus `测试记录` / `测试内容`, `测试进度100%`, or concise environment / handoff conclusions such as `stg测试完成`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` also count as a test conclusion.
 - `仅测试完成备注`: only short completion text is visible, such as `测试完成`, `验证通过`, `待发布`, `已发布`, or `已上线`.
 - `缺测试报告/结论`: neither a report nor a clear conclusion is visible.
 - `待确认：链接无法打开`: a candidate link exists but cannot be opened or verified.
 
-For standard flow, only `有测试报告` satisfies the test-report requirement. `有测试结论` and `仅测试完成备注` are insufficient for standard flow unless an approved exception is explicitly recorded. For simplified flow, `有测试结论` or `仅测试完成备注` can satisfy the completion-evidence requirement when acceptance evidence is present.
+For standard flow, only `有测试报告` satisfies the test-report requirement. `有测试结论` and `仅测试完成备注` are insufficient for standard flow unless an approved exception is explicitly recorded. For simplified flow, `有测试结论` satisfies the completion-evidence requirement. A comment with only isolated `测试完成` remains `仅测试完成备注`; before `2026-07-01`, completion comments with environment,验收/发布交接, or explicit next-handler mention are normalized to `有测试结论`.
+
+## Board/Whiteboard Evidence Boundary
+
+If a Lark test-case document is a board/whiteboard and the app can only confirm the board object exists but cannot read node text, mark `待确认：画板节点不可读`. This is an evidence-completeness limitation, not an automatic deduction for missing test cases, missing product/technical understanding, or incomplete impact assessment. Deduct only after manually opening the board and confirming the content is actually missing or insufficient.
 
 ## Self-Test / Submission Evidence Rule
 
