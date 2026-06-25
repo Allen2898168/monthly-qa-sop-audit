@@ -248,7 +248,7 @@ Open test-report evidence when adjacent wording includes:
 测试结论
 ```
 
-When there is no labeled test-report link, also scan Jira comments for simplified-flow completion evidence. A comment counts as `有测试结论` when it contains completion/result wording such as `测试完成`, `测试通过`, or `验证通过`, and also contains record wording such as `测试记录`, `测试内容`, `验证记录`, `验证内容`, or `执行记录`. For demands whose testing starts before `2026-07-01`, Jira comments such as `测试进度100%`, `stg测试完成`, `stg环境测试通过`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` also count as valid simplified-flow completion evidence. A short comment with only isolated `测试完成` / `测试通过` remains `仅测试完成备注`.
+When there is no labeled test-report link, also scan Jira comments for simplified-flow completion evidence. A comment counts as `有测试结论` when it contains completion/result wording such as `测试完成`, `测试通过`, or `验证通过`, and also contains record wording such as `测试记录`, `测试内容`, `验证记录`, `验证内容`, or `执行记录`. For demands whose testing starts before `2026-07-01`, isolated Jira comments such as `测试完成`, `测试通过`, or `验证通过`, and comments such as `测试进度100%`, `stg测试完成`, `stg环境测试通过`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` also count as valid simplified-flow completion evidence. Pure release/status comments such as `待发布`, `已发布`, or `已上线` remain `仅测试完成备注`.
 
 When Jira comments contain `验收问题`, `验收问题清单`, `问题跟踪表`, or similar wording plus a Lark/wiki/base URL, open the issue list and classify rows using `references/acceptance-issue-list.md`.
 

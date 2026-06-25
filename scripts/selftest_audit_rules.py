@@ -238,7 +238,8 @@ def main():
         "有测试结论",
         "完整测试结论",
     )
-    assert_equal(audit.classify_test_report("测试完成"), "仅测试完成备注", "仅完成备注")
+    assert_equal(audit.classify_test_report("测试完成"), "有测试结论", "单独测试完成备注算简化流程测试结论")
+    assert_equal(audit.classify_test_report("测试通过"), "有测试结论", "单独测试通过备注算简化流程测试结论")
     assert_equal(
         audit.classify_test_report("测试完成 麻烦[~francis107751]验收"),
         "有测试结论",
@@ -279,6 +280,15 @@ def main():
         ),
         "有测试结论",
         "collector must use Jira comments as simplified-flow completion evidence when no report link exists",
+    )
+    assert_equal(
+        collect.classify_test_report(
+            [],
+            {},
+            {"fields": {"comment": {"comments": [{"body": "测试完成"}]}}},
+        ),
+        "有测试结论",
+        "collector must treat isolated completion comments as simplified-flow test conclusions",
     )
     assert_equal(audit.classify_self_test("https://x.example/wiki/abc"), "缺自测报告", "未标注自测/提测报告的链接不算自测报告")
     assert_equal(audit.classify_self_test("https://x.example/wiki/abc 自测报告"), "有自测报告", "显式自测报告链接")
@@ -392,6 +402,28 @@ def main():
         "简化流程暂不要求影响面评估",
         "简化流程逐单表不展示缺影响面误导",
     )
+    simplified_only_completion_note = audit.audit_row(
+        {
+            "JIRA单": "WWLD-SIMPLE-DONE 简化流程",
+            "流程类型": "简化流程",
+            "Story Points": "3",
+            "状态": "已测试",
+            "提测前完成测试用例产出": "缺",
+            "用例/评审记录": "缺失评审",
+            "测试用例是否编写": "缺失",
+            "全局影响面评估分析是否完整": "缺失",
+            "自测报告": "缺失",
+            "测试报告": "测试完成",
+            "实际测试完成": "如期完成测试",
+            "验收/线上问题": "无",
+            "风险同步/闭环记录": "有风险同步",
+            "Bug记录是否规范": "无关联Bug",
+        }
+    )
+    if "缺测试结论备注" in simplified_only_completion_note["row_findings"]:
+        raise AssertionError("简化流程单独测试完成备注已算测试结论，不应扣缺测试结论备注")
+    if simplified_only_completion_note["row_findings"] != ["无"]:
+        raise AssertionError(f"简化流程单独测试完成备注不应出现扣分项: {simplified_only_completion_note['row_findings']}")
     simplified_missing_conclusion = audit.audit_row(
         {
             "JIRA单": "WWLD-SIMPLE-NO-CONCLUSION 简化流程",

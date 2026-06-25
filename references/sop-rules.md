@@ -373,12 +373,12 @@ Otherwise mark `待确认`.
 For `测试报告`, use only these labels:
 
 - `有测试报告`: a full test report body or clear test report link exists.
-- `有测试结论`: test scope/result/risk or residual conclusion is clear, but no full report link is visible. For simplified-flow demands before `2026-07-01`, `测试完成` / `测试通过` plus `测试记录` / `测试内容`, `测试进度100%`, or concise environment / handoff conclusions such as `stg测试完成`, `stg环境测试通过`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` also count as a test conclusion.
-- `仅测试完成备注`: only short completion text is visible, such as `测试完成`, `验证通过`, `待发布`, `已发布`, or `已上线`.
+- `有测试结论`: test scope/result/risk or residual conclusion is clear, but no full report link is visible. For simplified-flow demands before `2026-07-01`, isolated completion/result notes such as `测试完成`, `测试通过`, or `验证通过`, `测试进度100%`, or concise environment / handoff conclusions such as `stg测试完成`, `stg环境测试通过`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` also count as a test conclusion.
+- `仅测试完成备注`: only release/status text is visible, such as `待发布`, `已发布`, or `已上线`.
 - `缺测试报告/结论`: neither a report nor a clear conclusion is visible.
 - `待确认：链接无法打开`: a candidate link exists but cannot be opened or verified.
 
-For standard flow, only `有测试报告` satisfies the test-report requirement. `有测试结论` and `仅测试完成备注` are insufficient for standard flow unless an approved exception is explicitly recorded. For simplified flow, `有测试结论` satisfies the completion-evidence requirement. A comment with only isolated `测试完成` remains `仅测试完成备注`; before `2026-07-01`, completion comments with environment,验收/发布交接, or explicit next-handler mention are normalized to `有测试结论`.
+For standard flow, only `有测试报告` satisfies the test-report requirement. `有测试结论` and `仅测试完成备注` are insufficient for standard flow unless an approved exception is explicitly recorded. For simplified flow, `有测试结论` satisfies the completion-evidence requirement. Before `2026-07-01`, isolated completion comments such as `测试完成`, `测试通过`, or `验证通过`, and completion comments with environment, 验收/发布交接, or explicit next-handler mention are normalized to `有测试结论`.
 
 ## Board/Whiteboard Evidence Boundary
 

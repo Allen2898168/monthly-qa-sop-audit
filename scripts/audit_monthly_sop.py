@@ -245,17 +245,21 @@ def infer_process_type(row):
     return "待确认"
 
 
-COMPLETION_ONLY_PATTERNS = [
+COMPLETION_CONCLUSION_PATTERNS = [
     r"^测试完成$",
     r"^测试通过$",
     r"^验证通过$",
     r"^已测完$",
-    r"^待发布$",
-    r"^已发布$",
-    r"^已上线$",
     r"测试完成[，,。\\s]*(待发布|已发布|已上线|产品验收中|验收中)?$",
     r"测试通过[，,。\\s]*(待发布|已发布|已上线|产品验收中|验收中)?$",
     r"验证通过[，,。\\s]*(待发布|已发布|已上线)?$",
+]
+
+
+COMPLETION_ONLY_PATTERNS = [
+    r"^待发布$",
+    r"^已发布$",
+    r"^已上线$",
 ]
 
 
@@ -292,6 +296,8 @@ def classify_test_report(text):
     if has_link and re.search(r"测试报告|report|报告|测试总结", t, re.I):
         return "有测试报告"
     if SIMPLE_COMPLETION_HANDOFF_RE.search(t):
+        return "有测试结论"
+    if any(re.search(p, t, re.I) for p in COMPLETION_CONCLUSION_PATTERNS):
         return "有测试结论"
     if any(re.search(p, t, re.I) for p in COMPLETION_ONLY_PATTERNS):
         return "仅测试完成备注"
