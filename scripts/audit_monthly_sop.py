@@ -20,6 +20,7 @@ EXPECTED_COLUMNS = [
     "业务模块",
     "Story Points",
     "测试人员",
+    "研发人员",
     "流程类型",
     "测试周期",
     "实际测试完成",
@@ -382,6 +383,14 @@ def has_gate_evidence(row):
     )
 
 
+RD_FRONTEND_BACKEND_RE = re.compile(r"(^|[,，;；\s]+)RD\s*[-_ ]?\s*(后端|前端)", re.I)
+
+
+def is_rd_frontend_or_backend_owner(row):
+    dev = first_value(row, ["研发人员", "开发人员", "研发", "开发", "开发负责人", "RD"])
+    return bool(RD_FRONTEND_BACKEND_RE.search(dev))
+
+
 def read_rows(path, fmt):
     delimiter = "\t" if fmt == "tsv" else ","
     with open(path, newline="", encoding="utf-8-sig") as f:
@@ -409,6 +418,7 @@ def audit_row(row):
     bug_record = norm(row.get("Bug记录是否规范"))
     finish = norm(row.get("实际测试完成"))
     standard_flow = ("标准" in flow_type) or flow_type == "待确认"
+    submission_report_exempt = is_rd_frontend_or_backend_owner(row)
 
     pre_submit_case_missing = not has_traceable_case_link(pre_submit_case)
     case_review_status = classify_case_review(case_record)
@@ -466,7 +476,7 @@ def audit_row(row):
         row_findings.append("全局影响面评估不完整")
         manual.append("确认涉及且需覆盖的影响项是否已补充具体影响点并转用例")
 
-    if standard_flow and is_missing(self_test):
+    if standard_flow and not submission_report_exempt and is_missing(self_test):
         issues.append("标准流程缺自测报告")
         row_findings.append("缺自测报告")
     if standard_flow and not has_gate_evidence(row):
@@ -515,6 +525,7 @@ def audit_row(row):
         "jira": jira,
         "flow_type": flow_type,
         "test_report": test_report,
+        "submission_report_exempt": submission_report_exempt,
         "issues": issues,
         "row_findings": row_findings,
         "deductions": row_findings,
@@ -964,6 +975,7 @@ def markdown_cell(value):
 
 def report_row_value(result, column):
     row = result.get("row", {})
+    submission_report_exempt = result.get("submission_report_exempt") or is_rd_frontend_or_backend_owner(row)
     if column == "流程类型":
         return result.get("flow_type") or first_value(row, ["流程类型"]) or "-"
     if column == "测试报告":
@@ -979,7 +991,10 @@ def report_row_value(result, column):
             return "缺影响面评估"
         return value.replace("画板未读", "内容无法读取")
     if column == "自测报告":
-        return classify_self_test(row.get(column))
+        value = classify_self_test(row.get(column))
+        if submission_report_exempt and is_missing(value):
+            return "RD后端/RD前端暂不要求提测报告"
+        return value
     if column == "Bug记录是否规范":
         value = first_value(row, [column]) or "-"
         if "疑似不规范" in value:

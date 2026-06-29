@@ -389,6 +389,8 @@ For `自测报告`, use only these labels:
 
 For standard-flow demands, missing self-test/submission evidence counts as a gate-trace miss under `严格执行质量门禁和缺陷闭环`.
 
+Exception: when Jira `研发人员` starts with `RD后端` or `RD前端`, do not require `自测报告` / `提测报告` / submission-report evidence for that demand. Other standard-flow checks, including the tester's full `测试报告`, use cases, review, gates, risks, and closure evidence, still apply.
+
 ## Formal Output Contract
 
 Formal monthly KPI audit output must use these sections:

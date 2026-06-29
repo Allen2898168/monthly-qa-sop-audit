@@ -187,9 +187,9 @@ def format_actual_test_completion(planned_end, tested_transition_date):
 
 def user_names(value):
     if isinstance(value, list):
-        return ",".join(u.get("name", "") for u in value if isinstance(u, dict))
+        return ",".join((u.get("displayName") or u.get("name") or "") for u in value if isinstance(u, dict))
     if isinstance(value, dict):
-        return value.get("name", "")
+        return value.get("displayName") or value.get("name", "")
     return value or ""
 
 
@@ -526,6 +526,7 @@ def collect(tester, month, jira, fetch_lark=True, verbose=True):
         sp = fld(f, "sp1") or fld(f, "sp2")
         module = fld(f, "module")
         module = module.get("value") if isinstance(module, dict) else module
+        dev_names = user_names(fld(f, "dev"))
         # Reuse the engine's own rule to infer 流程类型 from the title (which the
         # engine can't read from the JIRA单 cell, since that holds the key).
         flow_type = AUDIT.infer_process_type({
@@ -542,6 +543,7 @@ def collect(tester, month, jira, fetch_lark=True, verbose=True):
             "业务模块": module or "",
             "Story Points": sp if sp is not None else "",
             "测试人员": tester,
+            "研发人员": dev_names,
             "流程类型": flow_type,
             "预计测试开始时间": test_start,
             "预计测试完成时间": date10(fld(f, "test_end")),
@@ -571,7 +573,7 @@ def collect(tester, month, jira, fetch_lark=True, verbose=True):
 
 
 TSV_COLUMNS = [
-    "时间", "JIRA单", "标题", "状态", "业务模块", "Story Points", "测试人员", "流程类型",
+    "时间", "JIRA单", "标题", "状态", "业务模块", "Story Points", "测试人员", "研发人员", "流程类型",
     "预计测试开始时间", "预计测试完成时间", "测试周期", "实际测试完成",
     "提测前完成测试用例产出", "用例/评审记录", "测试用例是否编写",
     "全局影响面评估分析是否完整", "自测报告", "测试报告", "验收/线上问题",

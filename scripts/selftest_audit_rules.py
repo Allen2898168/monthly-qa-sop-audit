@@ -260,6 +260,77 @@ def main():
     )
     if "标准流程缺测试报告" not in standard_with_conclusion["issues"]:
         raise AssertionError("标准流程只有测试结论时必须判定为缺测试报告")
+    rd_backend_without_submission = audit.audit_row(
+        {
+            "JIRA单": "WWLD-14409 【BP钱包】美国KYC用户出款机制优化",
+            "流程类型": "标准流程",
+            "Story Points": "5",
+            "研发人员": "RD后端-Johan",
+            "提测前完成测试用例产出": "有：https://case.example",
+            "用例/评审记录": "用例评审通过",
+            "测试用例是否编写": "有效",
+            "全局影响面评估分析是否完整": "完整",
+            "自测报告": "缺失",
+            "测试报告": "有测试报告",
+            "实际测试完成": "如期完成测试",
+            "风险同步/闭环记录": "有风险同步",
+            "Bug记录是否规范": "无关联Bug",
+        }
+    )
+    if "标准流程缺自测报告" in rd_backend_without_submission["issues"]:
+        raise AssertionError("研发人员 RD后端 开头的单子不校验提测/自测报告")
+    if "缺自测报告" in rd_backend_without_submission["row_findings"]:
+        raise AssertionError("研发人员 RD后端 开头的单子逐单扣分项不能输出缺自测报告")
+    assert_equal(
+        audit.report_row_value(rd_backend_without_submission, "自测报告"),
+        "RD后端/RD前端暂不要求提测报告",
+        "RD后端/RD前端单子的自测报告列应说明暂不要求提测报告",
+    )
+    rd_frontend_without_submission = audit.audit_row(
+        {
+            "JIRA单": "WWLD-RD-FE 标准流程",
+            "流程类型": "标准流程",
+            "Story Points": "5",
+            "研发人员": "RD前端-Amy",
+            "提测前完成测试用例产出": "有：https://case.example",
+            "用例/评审记录": "用例评审通过",
+            "测试用例是否编写": "有效",
+            "全局影响面评估分析是否完整": "完整",
+            "自测报告": "缺失",
+            "测试报告": "有测试报告",
+            "实际测试完成": "如期完成测试",
+            "风险同步/闭环记录": "有风险同步",
+            "Bug记录是否规范": "无关联Bug",
+        }
+    )
+    if "标准流程缺自测报告" in rd_frontend_without_submission["issues"]:
+        raise AssertionError("研发人员 RD前端 开头的单子不校验提测/自测报告")
+    ordinary_dev_without_submission = audit.audit_row(
+        {
+            "JIRA单": "WWLD-ORDINARY-DEV 标准流程",
+            "流程类型": "标准流程",
+            "Story Points": "5",
+            "研发人员": "Johan",
+            "提测前完成测试用例产出": "有：https://case.example",
+            "用例/评审记录": "用例评审通过",
+            "测试用例是否编写": "有效",
+            "全局影响面评估分析是否完整": "完整",
+            "自测报告": "缺失",
+            "测试报告": "有测试报告",
+            "实际测试完成": "如期完成测试",
+            "风险同步/闭环记录": "有风险同步",
+            "Bug记录是否规范": "无关联Bug",
+        }
+    )
+    if "标准流程缺自测报告" not in ordinary_dev_without_submission["issues"]:
+        raise AssertionError("非 RD后端/RD前端 开头的标准流程仍必须校验提测/自测报告")
+    if "研发人员" not in collect.TSV_COLUMNS:
+        raise AssertionError("采集结果 TSV 必须包含研发人员，供审计阶段判断提测报告豁免")
+    assert_equal(
+        collect.user_names([{"displayName": "RD后端-Johan", "name": "johan108155@weexdev.com"}]),
+        "RD后端-Johan",
+        "研发人员采集应优先使用 Jira displayName",
+    )
     reviewed_case = audit.audit_row(
         {
             "JIRA单": "WWLD-REVIEW 标准流程",
