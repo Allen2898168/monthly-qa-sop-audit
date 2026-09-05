@@ -248,6 +248,8 @@ Open test-report evidence when adjacent wording includes:
 测试结论
 ```
 
+When there is no labeled test-report link, also scan Jira comments for simplified-flow completion evidence. A comment counts as `有测试结论` when it contains completion/result wording such as `测试完成`, `测试通过`, or `验证通过`, and also contains record wording such as `测试记录`, `测试内容`, `验证记录`, `验证内容`, or `执行记录`. For demands whose testing starts before `2026-07-01`, isolated Jira comments such as `测试完成`, `测试通过`, or `验证通过`, and comments such as `测试进度100%`, `stg测试完成`, `stg环境测试通过`, `stg验证通过`, `测试完成，请产品验收`, `测试完成 产品已同步验收`, `测试完成 麻烦[~xxx]` / `测试完成 请@xxx`, or `验证完成，可以发布` also count as valid simplified-flow completion evidence. Pure release/status comments such as `待发布`, `已发布`, or `已上线` remain `仅测试完成备注`.
+
 When Jira comments contain `验收问题`, `验收问题清单`, `问题跟踪表`, or similar wording plus a Lark/wiki/base URL, open the issue list and classify rows using `references/acceptance-issue-list.md`.
 
 ## Lark Document Fetch (App Token Mode)
@@ -280,7 +282,7 @@ Fetch protocol:
 The `eff` Lark app has docx/wiki read scopes but **not** `board:whiteboard:node:read`. So:
 
 - A test-case doc that is just a title + a board block (`raw_content` length is only the title, blocks show `has_board=true`) means the cases live in a whiteboard whose node text the app cannot read.
-- Do not classify such a doc as `缺失用例` (a board exists) and do not assert `有效` (cannot see nodes). Use the row-level label `用例为画板形式（board 对象存在，应用无 board 节点读取权限）` and mark case-content validity `待确认：画板节点不可读`.
+- Do not classify such a doc as `缺失用例` (a board exists) and do not assert `有效` (cannot see nodes). Use the row-level label `用例为画板形式（board 对象存在，应用无 board 节点读取权限）` and mark case-content validity `待确认：画板节点不可读`. This is an evidence-completeness limitation, not an automatic deduction for missing cases, missing product/technical understanding, or incomplete impact assessment.
 - When a test-case doc has a real text/table body (e.g. a full 全局影响面评估 table), assess those readable sections normally per `references/sop-rules.md`; only the in-board case nodes stay `待确认`.
 
 ### Self-Test / Report Reclassification After Reading

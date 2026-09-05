@@ -83,7 +83,9 @@ POSITIVE_PATTERNS = [
 
 
 def norm(value):
-    return (value or "").strip()
+    if value is None:
+        return ""
+    return str(value).strip()
 
 
 def has_any(text, patterns):
@@ -99,9 +101,17 @@ def first_value(row, names):
 
 
 def parse_number(value):
+    if isinstance(value, dict):
+        for key in ("value", "name", "displayName"):
+            parsed = parse_number(value.get(key))
+            if parsed is not None:
+                return parsed
     t = norm(value)
     if not t:
         return None
+    value_match = re.search(r"['\"]value['\"]\s*:\s*['\"]?(-?\d+(?:\.\d+)?)", t)
+    if value_match:
+        return float(value_match.group(1))
     match = re.search(r"-?\d+(?:\.\d+)?", t)
     return float(match.group(0)) if match else None
 
@@ -228,23 +238,46 @@ def infer_process_type(row):
 
     if "快速优化" in jira:
         return "简化流程"
+    if story_points is not None and story_points <= 3:
+        return "简化流程"
     if duration is not None and duration <= 1 and story_points is not None and story_points < 3:
         return "简化流程"
     return "待确认"
 
 
-COMPLETION_ONLY_PATTERNS = [
+COMPLETION_CONCLUSION_PATTERNS = [
     r"^测试完成$",
     r"^测试通过$",
     r"^验证通过$",
     r"^已测完$",
-    r"^待发布$",
-    r"^已发布$",
-    r"^已上线$",
     r"测试完成[，,。\\s]*(待发布|已发布|已上线|产品验收中|验收中)?$",
     r"测试通过[，,。\\s]*(待发布|已发布|已上线|产品验收中|验收中)?$",
     r"验证通过[，,。\\s]*(待发布|已发布|已上线)?$",
 ]
+
+
+COMPLETION_ONLY_PATTERNS = [
+    r"^待发布$",
+    r"^已发布$",
+    r"^已上线$",
+]
+
+
+SCHEDULE_ONLY_COMPLETION_RE = re.compile(
+    r"(测试完成时间|测试时间|完成时间).*(顺延|延期|延后|调整|更新)|"
+    r"(顺延|延期|延后|调整|更新).*(测试完成时间|测试时间|完成时间)",
+    re.I,
+)
+
+
+SIMPLE_COMPLETION_HANDOFF_RE = re.compile(
+    r"(stg|sit|uat|rc|测试环境|预发|灰度).{0,20}(测试完成|测试通过|验证通过|验证完成|已测完)|"
+    r"(测试完成|测试通过|验证通过|验证完成|已测完).{0,20}(stg|sit|uat|rc|测试环境|预发|灰度)|"
+    r"(测试完成|测试通过|验证通过|验证完成|已测完).*(请|麻烦|通知|同步)?.*验收|"
+    r"(测试完成|测试通过|验证通过|验证完成|已测完).*(请|麻烦|辛苦)\s*(\[~[^\]]+\]|@[A-Za-z0-9_.@-]+)|"
+    r"(测试完成|测试通过|验证通过|验证完成|已测完).*(可以|可)(发布|上线)",
+    re.I,
+)
 
 
 def classify_test_report(text):
@@ -253,6 +286,8 @@ def classify_test_report(text):
         return t
     if not t or re.fullmatch(r"(缺失|缺|无|未见|没有|N/A|NA)", t, re.I):
         return "缺测试报告/结论"
+    if SCHEDULE_ONLY_COMPLETION_RE.search(t):
+        return "缺测试报告/结论"
     if re.search(r"打不开|无法打开|无权限|权限不足|无法确认|链接失效|404|访问受限", t):
         return "待确认：链接无法打开"
     has_link = bool(re.search(r"https?://|wiki/|lark|Lark|飞书|文档|链接", t, re.I))
@@ -260,6 +295,10 @@ def classify_test_report(text):
         return "有测试报告"
     if has_link and re.search(r"测试报告|report|报告|测试总结", t, re.I):
         return "有测试报告"
+    if SIMPLE_COMPLETION_HANDOFF_RE.search(t):
+        return "有测试结论"
+    if any(re.search(p, t, re.I) for p in COMPLETION_CONCLUSION_PATTERNS):
+        return "有测试结论"
     if any(re.search(p, t, re.I) for p in COMPLETION_ONLY_PATTERNS):
         return "仅测试完成备注"
     has_scope = re.search(r"测试范围|覆盖范围|测试内容|验证范围|回归范围|功能点", t)
@@ -272,6 +311,24 @@ def classify_test_report(text):
     if re.search(r"测试完成|验证通过|已测完|待发布|已发布|已上线", t):
         return "仅测试完成备注"
     return "缺测试报告/结论"
+
+
+NOT_SUBMITTED_STATUS_RE = re.compile(r"需求池|开发中|待开发|待提测|联调中|实现中")
+TESTING_IN_PROGRESS_STATUS_RE = re.compile(r"测试中|已提测|待测试")
+
+
+def row_status(row):
+    return first_value(row, ["状态", "status", "Status"])
+
+
+def is_not_submitted_to_qa(row):
+    return bool(NOT_SUBMITTED_STATUS_RE.search(row_status(row)))
+
+
+def is_testing_in_progress_without_completion(row, finish):
+    if not TESTING_IN_PROGRESS_STATUS_RE.search(row_status(row)):
+        return False
+    return is_missing(finish) or bool(re.search(r"未见.*已测试|未见.*测试完成", finish))
 
 
 SELF_TEST_EVIDENCE_RE = re.compile(r"自测报告|自测文档|自测结果|提测报告|提测文档", re.I)
@@ -409,71 +466,81 @@ def audit_row(row):
     bug_record = norm(row.get("Bug记录是否规范"))
     finish = norm(row.get("实际测试完成"))
     standard_flow = ("标准" in flow_type) or flow_type == "待确认"
+    not_submitted = is_not_submitted_to_qa(row)
+    testing_in_progress = is_testing_in_progress_without_completion(row, finish)
+    requires_case_artifacts = standard_flow and not not_submitted
+    requires_completion_evidence = not not_submitted and not testing_in_progress
 
     pre_submit_case_missing = not has_traceable_case_link(pre_submit_case)
     case_review_status = classify_case_review(case_record)
     case_review_missing = case_review_status == "缺失评审"
-    if pre_submit_case_missing:
-        issues.append("提测前缺测试用例链接")
-        row_findings.append("提测前未见用例产出")
-    elif re.search(r"只有|无链接|未评审|待补|后补", pre_submit_case):
-        issues.append("提测前用例产出证据较弱")
-        row_findings.append("提测前用例产出证据较弱")
-        manual.append("确认提测前是否已有可追溯测试用例链接")
 
-    if not case_review_required and case_review_missing:
-        pass
-    elif case_review_status == "未见用例评审结论":
-        issues.append("用例评审结论不明确")
-        row_findings.append("用例评审结论待确认")
-        manual.append("未见用例评审结论")
-    elif case_review_missing:
+    if requires_case_artifacts:
         if pre_submit_case_missing:
-            issues.append("缺用例评审记录（已按缺用例处理）")
-            row_findings.append("未见用例/评审记录")
-            manual.append("已按用例未编写处理时，不重复按评审不通过扣分")
-        else:
-            issues.append("缺用例评审记录")
-            row_findings.append("未见用例/评审记录")
-            manual.append("确认是否按用例评审记录缺失计入")
-    elif case_review_status == "用例评审不通过":
-        issues.append("用例评审不通过")
-        row_findings.append("用例评审不通过")
+            issues.append("提测前缺测试用例链接")
+            row_findings.append("提测前未见用例产出")
+        elif re.search(r"只有|无链接|未评审|待补|后补", pre_submit_case):
+            issues.append("提测前用例产出证据较弱")
+            row_findings.append("提测前用例产出证据较弱")
+            manual.append("确认提测前是否已有可追溯测试用例链接")
 
-    if case_content:
-        if has_table_style_test_cases(case_content):
+        if not case_review_required and case_review_missing:
             pass
-        elif re.search(r"用例有效|有效|实际用例|测试点|可执行场景|非空", case_content):
-            pass
-        elif re.search(r"无效|仅有|空白|空表|占位|未见实际|缺失", case_content):
-            issues.append("测试用例内容无效")
-            row_findings.append("测试用例内容无效")
-        elif re.search(r"待确认|读取不完整", case_content):
-            issues.append("测试用例内容需确认")
-            row_findings.append("测试用例内容待确认")
-            manual.append("确认六. 测试用例是否有实际测试点/用例图/表格内容")
+        elif case_review_status == "未见用例评审结论":
+            issues.append("用例评审结论不明确")
+            row_findings.append("用例评审结论待确认")
+            manual.append("未见用例评审结论")
+        elif case_review_missing:
+            if pre_submit_case_missing:
+                issues.append("缺用例评审记录（已按缺用例处理）")
+                row_findings.append("未见用例/评审记录")
+                manual.append("已按用例未编写处理时，不重复按评审不通过扣分")
+            else:
+                issues.append("缺用例评审记录")
+                row_findings.append("未见用例/评审记录")
+                manual.append("确认是否按用例评审记录缺失计入")
+        elif case_review_status == "用例评审不通过":
+            issues.append("用例评审不通过")
+            row_findings.append("用例评审不通过")
 
-    if re.search(r"待确认|读取不完整|章节未展开", impact_assessment):
-        issues.append("全局影响面评估不完整")
-        row_findings.append("全局影响面评估不完整")
-        manual.append("确认涉及且需覆盖的影响项是否已补充具体影响点并转用例")
-    elif is_missing(impact_assessment):
-        issues.append("缺全局影响面评估记录")
-        row_findings.append("全局影响面评估缺失")
-        manual.append("确认用例文档是否存在全局影响面评估")
-    elif re.search(r"不完整|缺少|读取不完整", impact_assessment):
-        issues.append("全局影响面评估不完整")
-        row_findings.append("全局影响面评估不完整")
-        manual.append("确认涉及且需覆盖的影响项是否已补充具体影响点并转用例")
+        if case_content:
+            if has_table_style_test_cases(case_content):
+                pass
+            elif re.search(r"用例有效|有效|实际用例|测试点|可执行场景|非空", case_content):
+                pass
+            elif re.search(r"无效|仅有|空白|空表|占位|未见实际|缺失", case_content):
+                issues.append("测试用例内容无效")
+                row_findings.append("测试用例内容无效")
+            elif re.search(r"待确认|读取不完整", case_content):
+                issues.append("测试用例内容需确认")
+                row_findings.append("测试用例内容待确认")
+                manual.append("确认六. 测试用例是否有实际测试点/用例图/表格内容")
 
-    if standard_flow and is_missing(self_test):
+        if re.search(r"待确认|读取不完整|章节未展开", impact_assessment):
+            if re.search(r"画板|board|节点不可读", impact_assessment, re.I):
+                row_findings.append("待确认：画板节点不可读")
+            else:
+                row_findings.append("全局影响面评估待确认")
+            manual.append("确认涉及且需覆盖的影响项是否已补充具体影响点并转用例")
+        elif is_missing(impact_assessment):
+            issues.append("缺全局影响面评估记录")
+            row_findings.append("全局影响面评估缺失")
+            manual.append("确认用例文档是否存在全局影响面评估")
+        elif re.search(r"不完整|缺少|读取不完整", impact_assessment):
+            issues.append("全局影响面评估不完整")
+            row_findings.append("全局影响面评估不完整")
+            manual.append("确认涉及且需覆盖的影响项是否已补充具体影响点并转用例")
+
+    if standard_flow and not not_submitted and is_missing(self_test):
         issues.append("标准流程缺自测报告")
         row_findings.append("缺自测报告")
-    if standard_flow and not has_gate_evidence(row):
+    if standard_flow and not not_submitted and not has_gate_evidence(row):
         issues.append("关键门禁无留痕")
         row_findings.append("未见准入/冒烟/准出留痕")
 
-    if standard_flow and test_report in {"缺测试报告/结论", "仅测试完成备注", "有测试结论"}:
+    if not requires_completion_evidence:
+        pass
+    elif standard_flow and test_report in {"缺测试报告/结论", "仅测试完成备注", "有测试结论"}:
         issues.append("标准流程缺测试报告")
         row_findings.append(test_report)
     elif standard_flow and test_report.startswith("待确认"):
@@ -481,9 +548,9 @@ def audit_row(row):
         row_findings.append(test_report)
     elif (not standard_flow) and test_report == "缺测试报告/结论":
         issues.append("简化流程缺完成结论")
-        row_findings.append("缺测试报告/结论")
+        row_findings.append("缺测试结论备注")
 
-    if is_missing(finish) or re.search(r"延期|未完成|阻塞", finish):
+    if requires_completion_evidence and (is_missing(finish) or re.search(r"延期|未完成|阻塞", finish)):
         issues.append("测试完成状态异常")
         row_findings.append("测试完成状态异常，待确认")
         manual.append("确认是否因测试侧原因影响项目节奏")
@@ -515,6 +582,8 @@ def audit_row(row):
         "jira": jira,
         "flow_type": flow_type,
         "test_report": test_report,
+        "not_submitted_to_qa": not_submitted,
+        "testing_in_progress": testing_in_progress,
         "issues": issues,
         "row_findings": row_findings,
         "deductions": row_findings,
@@ -549,12 +618,16 @@ def summarize(results):
     if missing_self_test:
         monthly_suggestions.append(f"标准流程未见自测报告共 {missing_self_test} 个需求，按门禁规则每次扣 5 分，单项月度封顶 15 分。")
     missing_reports = row_finding_counts.get("缺测试报告/结论", 0)
+    missing_simple_conclusions = row_finding_counts.get("缺测试结论备注", 0)
     completion_only = row_finding_counts.get("仅测试完成备注", 0)
     conclusion_only = row_finding_counts.get("有测试结论", 0)
     standard_report_misses = issue_counts.get("标准流程缺测试报告", 0)
+    simple_conclusion_misses = issue_counts.get("简化流程缺完成结论", 0)
     report_pending = sum(count for finding, count in row_finding_counts.items() if finding.startswith("待确认：链接无法打开"))
     if missing_reports:
         monthly_suggestions.append(f"缺测试报告/结论共 {missing_reports} 个需求，标准流程按缺测试报告评估。")
+    if missing_simple_conclusions:
+        monthly_suggestions.append(f"简化流程缺测试结论备注共 {missing_simple_conclusions} 个需求，按每次扣 3 分。")
     if completion_only:
         monthly_suggestions.append(f"仅测试完成备注共 {completion_only} 个需求，标准流程不等同于完整测试报告。")
     if conclusion_only:
@@ -597,6 +670,9 @@ def summarize(results):
         detail_text = f"（{'，'.join(report_details)}）" if report_details else ""
         gate_quality_parts.append(f"标准流程缺测试报告 {standard_report_misses} 个{detail_text}")
         gate_quality_deduction += standard_report_misses * 3
+    if simple_conclusion_misses:
+        gate_quality_parts.append(f"简化流程缺测试结论备注 {simple_conclusion_misses} 个")
+        gate_quality_deduction += simple_conclusion_misses * 3
     if gate_quality_parts:
         gate_quality_capped = min(gate_quality_deduction, 15)
         if gate_quality_deduction > gate_quality_capped:
@@ -964,10 +1040,38 @@ def markdown_cell(value):
 
 def report_row_value(result, column):
     row = result.get("row", {})
+    not_submitted = result.get("not_submitted_to_qa") or is_not_submitted_to_qa(row)
+    flow_type = result.get("flow_type") or first_value(row, ["流程类型"])
+    simplified_flow = "简化" in flow_type
+    if not_submitted:
+        not_due_values = {
+            "实际测试完成": "未到产出节点：测试完成暂不要求",
+            "提测前完成测试用例产出": "未到产出节点：测试用例暂不要求",
+            "用例/评审记录": "未到产出节点：用例评审暂不要求",
+            "测试用例是否编写": "未到产出节点：测试用例暂不要求",
+            "全局影响面评估分析是否完整": "未到产出节点：影响面评估暂不要求",
+            "自测报告": "未到产出节点：自测报告暂不要求",
+            "测试报告": "未到产出节点：测试报告暂不要求",
+        }
+        if column in not_due_values:
+            return not_due_values[column]
+    if simplified_flow:
+        simplified_values = {
+            "提测前完成测试用例产出": "简化流程暂不要求测试用例",
+            "用例/评审记录": "简化流程暂不要求用例评审",
+            "测试用例是否编写": "简化流程暂不要求测试用例",
+            "全局影响面评估分析是否完整": "简化流程暂不要求影响面评估",
+            "自测报告": "简化流程暂不要求自测报告",
+        }
+        if column in simplified_values:
+            return simplified_values[column]
     if column == "流程类型":
-        return result.get("flow_type") or first_value(row, ["流程类型"]) or "-"
+        return flow_type or "-"
     if column == "测试报告":
-        return result.get("test_report") or "-"
+        test_report = result.get("test_report") or "-"
+        if simplified_flow and test_report == "缺测试报告/结论":
+            return "缺测试结论备注"
+        return test_report
     if column == "用例/评审记录":
         return classify_case_review(first_value(row, [column]))
     if column == "测试用例是否编写":

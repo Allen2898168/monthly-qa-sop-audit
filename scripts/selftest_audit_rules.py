@@ -149,6 +149,16 @@ def main():
         "Story Points > 3",
     )
     assert_equal(
+        audit.parse_number("{'self': 'https://jira.example/rest/api/2/customFieldOption/12903', 'value': '5', 'id': '12903'}"),
+        5.0,
+        "Jira option-shaped Story Points must read value, not digits from URL",
+    )
+    assert_equal(
+        audit.infer_process_type({"JIRA单": "WWLD-Z 普通需求", "Story Points": "3", "测试周期": "2"}),
+        "简化流程",
+        "Story Points <= 3 and no standard-flow condition",
+    )
+    assert_equal(
         audit.get_test_duration_days(
             {
                 "预计测试开始时间": "2026-05-26",
@@ -228,9 +238,58 @@ def main():
         "有测试结论",
         "完整测试结论",
     )
-    assert_equal(audit.classify_test_report("测试完成"), "仅测试完成备注", "仅完成备注")
+    assert_equal(audit.classify_test_report("测试完成"), "有测试结论", "单独测试完成备注算简化流程测试结论")
+    assert_equal(audit.classify_test_report("测试通过"), "有测试结论", "单独测试通过备注算简化流程测试结论")
+    assert_equal(
+        audit.classify_test_report("测试完成 麻烦[~francis107751]验收"),
+        "有测试结论",
+        "测试完成并交接验收 is a simplified-flow completion conclusion",
+    )
+    assert_equal(
+        audit.classify_test_report("测试完成 麻烦[~francis107751]"),
+        "有测试结论",
+        "测试完成并指定下一处理人 is a simplified-flow completion conclusion",
+    )
+    assert_equal(
+        audit.classify_test_report("stg环境测试通过"),
+        "有测试结论",
+        "environment completion comments are simplified-flow completion conclusions",
+    )
+    assert_equal(
+        audit.classify_test_report("测试完成时间顺延一天"),
+        "缺测试报告/结论",
+        "schedule extension wording must not be treated as completion evidence",
+    )
     assert_equal(audit.classify_test_report(""), "缺测试报告/结论", "缺报告结论")
     assert_equal(audit.classify_test_report("测试报告链接无法打开"), "待确认：链接无法打开", "链接无法打开")
+    assert_equal(
+        collect.classify_test_report(
+            [],
+            {},
+            {
+                "fields": {
+                    "comment": {
+                        "comments": [
+                            {"body": "测试完成 麻烦[~francis107751]验收"},
+                            {"body": "测试完成 麻烦[~francis107751]"},
+                            {"body": "stg环境测试通过"},
+                        ]
+                    }
+                }
+            },
+        ),
+        "有测试结论",
+        "collector must use Jira comments as simplified-flow completion evidence when no report link exists",
+    )
+    assert_equal(
+        collect.classify_test_report(
+            [],
+            {},
+            {"fields": {"comment": {"comments": [{"body": "测试完成"}]}}},
+        ),
+        "有测试结论",
+        "collector must treat isolated completion comments as simplified-flow test conclusions",
+    )
     assert_equal(audit.classify_self_test("https://x.example/wiki/abc"), "缺自测报告", "未标注自测/提测报告的链接不算自测报告")
     assert_equal(audit.classify_self_test("https://x.example/wiki/abc 自测报告"), "有自测报告", "显式自测报告链接")
     assert_equal(audit.classify_self_test("待确认：链接未标注自测报告"), "缺自测报告", "链接未标注自测报告不能输出待确认")
@@ -260,6 +319,163 @@ def main():
     )
     if "标准流程缺测试报告" not in standard_with_conclusion["issues"]:
         raise AssertionError("标准流程只有测试结论时必须判定为缺测试报告")
+    board_unread_row = {
+        "JIRA单": "WWLD-BOARD-UNREAD 画板节点不可读",
+        "流程类型": "标准流程",
+        "Story Points": "5",
+        "状态": "已提测",
+        "提测前完成测试用例产出": "测试用例链接：https://case.example",
+        "用例/评审记录": "未到产出节点：用例评审暂不要求",
+        "测试用例是否编写": "画板形式（board存在，节点不可读）",
+        "全局影响面评估分析是否完整": "待确认：画板节点不可读",
+        "自测报告": "有自测报告",
+        "测试报告": "缺测试报告/结论",
+        "实际测试完成": "未见状态流转已测试（预计 2026-07-04）",
+        "风险同步/闭环记录": "有风险同步",
+        "Bug记录是否规范": "无关联Bug",
+    }
+    board_unread_result = audit.audit_row(board_unread_row)
+    if "全局影响面评估不完整" in board_unread_result["issues"]:
+        raise AssertionError("画板节点不可读只能作为待确认证据，不能直接进入明确扣分")
+    if "待确认：画板节点不可读" not in board_unread_result["row_findings"]:
+        raise AssertionError("画板节点不可读应保留在逐单待确认事实中")
+    standard_missing_artifacts = audit.audit_row(
+        {
+            "JIRA单": "WWLD-STD-MISSING 标准流程",
+            "流程类型": "标准流程",
+            "Story Points": "5",
+            "状态": "已测试",
+            "提测前完成测试用例产出": "缺",
+            "用例/评审记录": "缺失评审",
+            "测试用例是否编写": "缺失",
+            "全局影响面评估分析是否完整": "缺失",
+            "自测报告": "有自测报告",
+            "测试报告": "有测试报告",
+            "实际测试完成": "如期完成测试",
+            "风险同步/闭环记录": "有风险同步",
+            "Bug记录是否规范": "无关联Bug",
+        }
+    )
+    for expected in ["提测前缺测试用例链接", "缺用例评审记录（已按缺用例处理）", "缺全局影响面评估记录"]:
+        if expected not in standard_missing_artifacts["issues"]:
+            raise AssertionError(f"标准流程仍必须检查用例/评审/影响面: {expected}")
+    simplified_missing_artifacts = audit.audit_row(
+        {
+            "JIRA单": "WWLD-SIMPLE 简化流程",
+            "流程类型": "简化流程",
+            "Story Points": "3",
+            "状态": "已测试",
+            "提测前完成测试用例产出": "缺",
+            "用例/评审记录": "缺失评审",
+            "测试用例是否编写": "缺失",
+            "全局影响面评估分析是否完整": "缺失",
+            "自测报告": "缺失",
+            "测试报告": "有测试结论",
+            "实际测试完成": "如期完成测试",
+            "验收/线上问题": "无",
+            "风险同步/闭环记录": "有风险同步",
+            "Bug记录是否规范": "无关联Bug",
+        }
+    )
+    forbidden_simple_issues = {
+        "提测前缺测试用例链接",
+        "缺用例评审记录（已按缺用例处理）",
+        "缺用例评审记录",
+        "测试用例内容无效",
+        "缺全局影响面评估记录",
+        "标准流程缺自测报告",
+        "关键门禁无留痕",
+        "标准流程缺测试报告",
+    }
+    unexpected_simple_issues = forbidden_simple_issues.intersection(simplified_missing_artifacts["issues"])
+    if unexpected_simple_issues:
+        raise AssertionError(f"简化流程不得扣用例/影响面/自测/完整报告: {sorted(unexpected_simple_issues)}")
+    if simplified_missing_artifacts["row_findings"] != ["无"]:
+        raise AssertionError(f"简化流程有测试结论时不应出现扣分项: {simplified_missing_artifacts['row_findings']}")
+    assert_equal(
+        audit.report_row_value(simplified_missing_artifacts, "提测前完成测试用例产出"),
+        "简化流程暂不要求测试用例",
+        "简化流程逐单表不展示缺用例误导",
+    )
+    assert_equal(
+        audit.report_row_value(simplified_missing_artifacts, "全局影响面评估分析是否完整"),
+        "简化流程暂不要求影响面评估",
+        "简化流程逐单表不展示缺影响面误导",
+    )
+    simplified_only_completion_note = audit.audit_row(
+        {
+            "JIRA单": "WWLD-SIMPLE-DONE 简化流程",
+            "流程类型": "简化流程",
+            "Story Points": "3",
+            "状态": "已测试",
+            "提测前完成测试用例产出": "缺",
+            "用例/评审记录": "缺失评审",
+            "测试用例是否编写": "缺失",
+            "全局影响面评估分析是否完整": "缺失",
+            "自测报告": "缺失",
+            "测试报告": "测试完成",
+            "实际测试完成": "如期完成测试",
+            "验收/线上问题": "无",
+            "风险同步/闭环记录": "有风险同步",
+            "Bug记录是否规范": "无关联Bug",
+        }
+    )
+    if "缺测试结论备注" in simplified_only_completion_note["row_findings"]:
+        raise AssertionError("简化流程单独测试完成备注已算测试结论，不应扣缺测试结论备注")
+    if simplified_only_completion_note["row_findings"] != ["无"]:
+        raise AssertionError(f"简化流程单独测试完成备注不应出现扣分项: {simplified_only_completion_note['row_findings']}")
+    simplified_missing_conclusion = audit.audit_row(
+        {
+            "JIRA单": "WWLD-SIMPLE-NO-CONCLUSION 简化流程",
+            "流程类型": "简化流程",
+            "Story Points": "3",
+            "状态": "已测试",
+            "提测前完成测试用例产出": "缺",
+            "用例/评审记录": "缺失评审",
+            "测试用例是否编写": "缺失",
+            "全局影响面评估分析是否完整": "缺失",
+            "自测报告": "缺失",
+            "测试报告": "缺失",
+            "实际测试完成": "如期完成测试",
+            "验收/线上问题": "无",
+            "风险同步/闭环记录": "有风险同步",
+            "Bug记录是否规范": "无关联Bug",
+        }
+    )
+    if "简化流程缺完成结论" not in simplified_missing_conclusion["issues"]:
+        raise AssertionError("简化流程缺测试结论备注必须扣门禁项")
+    if "缺测试结论备注" not in simplified_missing_conclusion["row_findings"]:
+        raise AssertionError("简化流程缺完成证据时逐单扣分项应写缺测试结论备注")
+    simple_summary = audit.summarize([simplified_missing_conclusion])
+    simple_gate_row = next((row for row in simple_summary["concise_kpi_rows"] if row["项目"] == "严格执行质量门禁和缺陷闭环"), None)
+    if not simple_gate_row or "简化流程缺测试结论备注 1 个" not in simple_gate_row["问题"]:
+        raise AssertionError("简化流程缺测试结论备注必须进入门禁汇总扣分")
+    assert_equal(simple_gate_row["建议扣分"], "扣 3 分", "简化流程缺测试结论备注按 3 分扣")
+    not_submitted = audit.audit_row(
+        {
+            "JIRA单": "WWLD-NOT-SUBMITTED 标准流程",
+            "流程类型": "标准流程",
+            "Story Points": "5",
+            "状态": "开发中",
+            "提测前完成测试用例产出": "缺",
+            "用例/评审记录": "缺失评审",
+            "测试用例是否编写": "缺失",
+            "全局影响面评估分析是否完整": "缺失",
+            "自测报告": "缺失",
+            "测试报告": "缺失",
+            "实际测试完成": "",
+            "验收/线上问题": "无",
+            "风险同步/闭环记录": "有风险同步",
+            "Bug记录是否规范": "无关联Bug",
+        }
+    )
+    if not_submitted["row_findings"] != ["无"]:
+        raise AssertionError(f"未到提测节点不得扣测试产物: {not_submitted['row_findings']}")
+    assert_equal(
+        audit.report_row_value(not_submitted, "测试报告"),
+        "未到产出节点：测试报告暂不要求",
+        "开发中需求不要求测试报告",
+    )
     reviewed_case = audit.audit_row(
         {
             "JIRA单": "WWLD-REVIEW 标准流程",
